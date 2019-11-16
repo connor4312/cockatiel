@@ -6,7 +6,7 @@
   "scripts": {
     "prepublish": "npm run compile",
     "test": "npm run test:unit && npm run test:lint",
-    "test:unit": "mocha",
+    "test:unit": "mocha --opts mocha.opts",
     "test:lint": "tslint -p tsconfig.json",
     "test:fmt": "prettier --list-different \"src/**/*.ts\"",
     "fmt": "prettier --write \"src/**/*.ts\"",
