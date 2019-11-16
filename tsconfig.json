@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
+    "declaration": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "strict": true,
+    "moduleResolution": "node",
+    "newLine": "LF",
+    "module": "commonjs",
+    "target": "es6",
+    "lib": ["es6", "es7"],
+    "typeRoots": [
+      "node_modules/@types"
+    ],
+    "outDir": "dist",
+    "types": [
+      "node",
+      "mocha",
+      "sinon-chai",
+      "chai-as-promised"
+    ]
+  }
+}

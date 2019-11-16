@@ -1,0 +1,11 @@
+
+{
+  "$schema": "http://json.schemastore.org/tslint",
+  "extends": ["tslint:recommended", "tslint-config-prettier"],
+  "rules": {
+    "object-literal-sort-keys": false,
+    "no-var-requires": false,
+    "no-unused-expression": false,
+    "max-classes-per-file": false
+  }
+}

@@ -1,0 +1,4 @@
+--require source-map-support/register
+--timeout 20000
+--recursive
+dist/**/*.test.js

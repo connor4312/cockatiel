@@ -1,0 +1,62 @@
+{
+  "name": "cockatiel",
+  "version": "0.1.0",
+  "description": "A resilience and transient-fault-handling library that allows developers to express policies such as Backoff, Retry, Circuit Breaker, Timeout, Bulkhead Isolation, and Fallback in a fluent and thread-safe manner. Inspired by .NET Polly.",
+  "main": "dist/index.js",
+  "scripts": {
+    "prepublish": "npm run compile",
+    "test": "npm run test:unit && npm run test:lint",
+    "test:unit": "mocha",
+    "test:lint": "tslint -p tsconfig.json",
+    "test:fmt": "prettier --list-different \"src/**/*.ts\"",
+    "fmt": "prettier --write \"src/**/*.ts\"",
+    "compile": "rimraf dist && tsc",
+    "watch": "rimraf dist && tsc --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/connor4312/cockatiel.git"
+  },
+  "keywords": [
+    "circuit-breaker",
+    "retry",
+    "backoff",
+    "jitter",
+    "resilience",
+    "timeout",
+    "fallback",
+    "fluent",
+    "polly"
+  ],
+  "author": "Connor Peet <connor@peet.io>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/connor4312/cockatiel/issues"
+  },
+  "homepage": "https://github.com/connor4312/cockatiel#readme",
+  "devDependencies": {
+    "@types/chai": "^4.2.5",
+    "@types/chai-as-promised": "^7.1.2",
+    "@types/mocha": "^5.2.7",
+    "@types/node": "^12.12.7",
+    "@types/sinon": "^7.5.0",
+    "@types/sinon-chai": "^3.2.3",
+    "chai": "^4.2.0",
+    "chai-as-promised": "^7.1.1",
+    "mocha": "^6.2.2",
+    "nyc": "^14.1.1",
+    "prettier": "^1.19.1",
+    "rimraf": "^3.0.0",
+    "sinon": "^7.5.0",
+    "sinon-chai": "^3.3.0",
+    "source-map-support": "^0.5.16",
+    "tslint": "^5.20.1",
+    "tslint-config-prettier": "^1.18.0",
+    "typescript": "^3.7.2"
+  },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true,
+    "trailingComma": "all"
+  }
+}
