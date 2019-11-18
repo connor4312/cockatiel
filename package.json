@@ -7,7 +7,7 @@
   "sideEffects": false,
   "scripts": {
     "prepublish": "npm run compile",
-    "test": "npm run test:unit && npm run test:lint && npm test:fmt",
+    "test": "rimraf dist && tsc && npm run test:unit && npm run test:lint && npm test:fmt",
     "test:cover": "nyc npm run test:unit",
     "test:unit": "mocha --opts mocha.opts",
     "test:lint": "tslint -p tsconfig.json",
