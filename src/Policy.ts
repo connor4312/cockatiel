@@ -1,3 +1,5 @@
+import { IBreaker } from './breaker/Breaker';
+import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
 import { RetryPolicy } from './RetryPolicy';
 
 type Constructor<T> = new (...args: any) => T;
@@ -8,6 +10,17 @@ const typeFilter = <T>(cls: Constructor<T>, predicate?: (error: T) => boolean) =
 const always = () => true;
 const never = () => false;
 
+export interface IBasePolicyOptions<ReturnType> {
+  errorFilter: (error: Error) => boolean;
+  resultFilter: (result: ReturnType) => boolean;
+}
+
+/**
+ * The reason for a call failure. Either an error, or the a value that was
+ * marked as a failure (when using result filtering).
+ */
+export type FailureReason<R> = { error: Error } | { value: R };
+
 /**
  * Factory that builds a base set of filters that can be used in circuit
  * breakers, retries, etc.
@@ -17,39 +30,37 @@ export class Policy<ReturnType> {
    * Creates a retry policy that handles all errors.
    */
   public static handleAll() {
-    return new Policy(always, never);
+    return new Policy({ errorFilter: always, resultFilter: never });
   }
 
   /**
    * See {@link Policy.orType} for usage.
    */
   public static handleType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
-    return new Policy(typeFilter(cls, predicate), never);
+    return new Policy({ errorFilter: typeFilter(cls, predicate), resultFilter: never });
   }
 
   /**
    * See {@link Policy.orWhen} for usage.
    */
   public static handleWhen(predicate: (error: Error) => boolean) {
-    return new Policy(predicate, never);
+    return new Policy({ errorFilter: predicate, resultFilter: never });
   }
   /**
    * See {@link Policy.orResultType} for usage.
    */
   public static handleResultType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
-    return new Policy(never, typeFilter(cls, predicate));
+    return new Policy({ errorFilter: never, resultFilter: typeFilter(cls, predicate) });
   }
 
   /**
    * See {@link Policy.orWhenResult} for usage.
    */
   public static handleWhenResult<T>(predicate: (error: T) => boolean) {
-    return new Policy(never, predicate);
+    return new Policy({ errorFilter: never, resultFilter: predicate });
   }
-  protected constructor(
-    private readonly errorFilter: (error: Error) => boolean,
-    private readonly resultFilter: (result: ReturnType) => boolean,
-  ) {}
+
+  protected constructor(private readonly options: Readonly<IBasePolicyOptions<ReturnType>>) {}
 
   /**
    * Allows the policy to additionally handles errors of the given type.
@@ -70,7 +81,10 @@ export class Policy<ReturnType> {
    */
   public orType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
     const filter = typeFilter(cls, predicate);
-    return new Policy(e => this.errorFilter(e) || filter(e), this.resultFilter);
+    return new Policy({
+      ...this.options,
+      errorFilter: e => this.options.errorFilter(e) || filter(e),
+    });
   }
 
   /**
@@ -90,7 +104,10 @@ export class Policy<ReturnType> {
    * ```
    */
   public orWhen(predicate: (error: Error) => boolean) {
-    return new Policy(e => this.errorFilter(e) || predicate(e), this.resultFilter);
+    return new Policy({
+      ...this.options,
+      errorFilter: e => this.options.errorFilter(e) || predicate(e),
+    });
   }
 
   /**
@@ -117,7 +134,10 @@ export class Policy<ReturnType> {
      * say that the 'wrapped' function returns `ReturnType - T`. However, I
      * can't seem to figure out how to get this to work...
      */
-    return new Policy<ReturnType>(this.errorFilter, r => this.resultFilter(r) || predicate(r));
+    return new Policy<ReturnType>({
+      ...this.options,
+      resultFilter: r => this.options.resultFilter(r) || predicate(r),
+    });
   }
 
   /**
@@ -141,7 +161,10 @@ export class Policy<ReturnType> {
     predicate?: (error: ReturnType) => boolean,
   ) {
     const filter = typeFilter(cls, predicate);
-    return new Policy<ReturnType>(this.errorFilter, r => this.resultFilter(r) || filter(r));
+    return new Policy<ReturnType>({
+      ...this.options,
+      resultFilter: r => this.options.resultFilter(r) || filter(r),
+    });
   }
 
   /**
@@ -149,8 +172,39 @@ export class Policy<ReturnType> {
    */
   public retry() {
     return new RetryPolicy({
-      errorFilter: this.errorFilter,
-      resultFilter: this.resultFilter,
+      errorFilter: this.options.errorFilter,
+      resultFilter: this.options.resultFilter,
+    });
+  }
+
+  /**
+   * Returns a circuit breaker for the policy. **Important**: you should share
+   * your circuit breaker between executions of whatever function you're
+   * wrapping for it to function!
+   *
+   * ```ts
+   * import { SamplingBreaker, Policy } from 'cockatiel';
+   *
+   * // Break if more than 20% of requests fail in a 30 second time window:
+   * const breaker = Policy
+   *  .handleAll()
+   *  .circuitBreaker(new SamplingBreaker(0.2, 30 * 1000));
+   *
+   * export function handleRequest() {
+   *   return breaker.execute(() => getInfoFromDatabase());
+   * }
+   * ```
+   *
+   * @param breaker -- The circuit breaker to use. This package exports
+   * ConsecutiveBreaker and SamplingBreakers for you to use.
+   * @param halfOpenAfter -- Time after failures to try to open the circuit
+   * breaker again. Defaults to 10 seconds.
+   */
+  public circuitBreaker(breaker: IBreaker, halfOpenAfter = 10 * 1000) {
+    return new CircuitBreakerPolicy({
+      ...this.options,
+      breaker,
+      halfOpenAfter,
     });
   }
 }
