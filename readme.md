@@ -10,7 +10,7 @@ npm install --save cockatiel
 
 ## Contents
 
-Cockatiel is a work-in progress; this serves as a table of contents and progress checklist!
+Cockatiel is a work-in progress; this serves as a table of contents and progress checklist.
 
 - [x] Base [Policy](#policy)
 - [x] [Backoffs](#backoffs)
@@ -20,6 +20,23 @@ Cockatiel is a work-in progress; this serves as a table of contents and progress
   - [DelegateBackoff](#DelegateBackoff)
   - [CompositeBackoff](#CompositeBackoff)
 - [x] [Retries](#retries)
+  - [retry.execute(fn)](#retryexecutefn)
+  - [retry.attempts(count)](#retryattemptscount)
+  - [retry.delay(amount)](#retrydelayamount)
+  - [retry.delegate(fn)](#retrydelegatefn)
+  - [retry.backoff(policy)](#retrybackoffpolicy)
+- [x] [Circuit Breaker](#circuit-breaker)
+  - [ConsecutiveBreaker](#ConsecutiveBreaker)
+  - [SamplingBreaker](#SamplingBreaker)
+  - [breaker.execute(fn)](#breakerexecutefn)
+  - [breaker.state](#breakerstate)
+  - [breaker.onBreak(callback)](#breakeronbreakcallback)
+  - [breaker.onReset(callback)](#breakeronresetcallback)
+  - [breaker.isolate()](#breakerisolate)
+- [ ] Timeout
+- [ ] Bulkhead Isolation
+- [ ] Cache (may be out of scope?)
+- [ ] Fallback
 
 ## Policy
 
@@ -116,7 +133,7 @@ const limitedBackoff = new ConstantBackoff(50, 3);
 
 ### ExponentialBackoff
 
-> Tip: exponential backoffs and circuit breakers are great friends!
+> Tip: exponential backoffs and [circuit breakers](#circuit-breaker) are great friends!
 
 The crowd favorite. Takes in an options object, which can have any of these properties:
 
@@ -246,7 +263,7 @@ const response1 = await Policy
   .execute(() => getJson('https://example.com'));
 ```
 
-### `execute(fn)`
+### `retry.execute(fn)`
 
 Executes the function. The current retry context, containing the current `{ attempt: number }`. The function should throw, return a promise, or return a value, which get handled as configured in the Policy.
 
@@ -259,7 +276,7 @@ await Policy
   .execute(() => getJson('https://example.com'));
 ```
 
-### `attempts(count)`
+### `retry.attempts(count)`
 
 Sets the maximum number of retry attempts.
 
@@ -271,7 +288,7 @@ Policy
   // ...
 ```
 
-### `delay(amount)`
+### `retry.delay(amount)`
 
 Sets the delay between retries. You can pass a single number, or a list of retry delays.
 
@@ -292,7 +309,7 @@ Policy
   // ...
 ```
 
-### `delegate(fn)`
+### `retry.delegate(fn)`
 
 Creates a delegate backoff. See [DelegateBackoff](#DelegateBackoff) for more details here.
 
@@ -304,7 +321,7 @@ Policy
   // ...
 ```
 
-### `backoff(fn)`
+### `retry.backoff(policy)`
 
 Uses a custom backoff strategy for retries.
 
@@ -314,4 +331,130 @@ Policy
   .retry()
   .backoff(myBackoff)
   // ...
+```
+
+## Circuit Breaker
+
+Circuit breakers stop execution for a period of time after a failure threshold has been reached. This is very useful to allow faulting systems to recover without overloading them. See the [Polly docs](https://github.com/App-vNext/Polly/wiki/Circuit-Breaker#how-the-polly-circuitbreaker-works) for more detailed information around circuit breakers.
+
+> It's **important** that you reuse the same circuit breaker across multiple requests, otherwise it won't do anything!
+
+To create a breaker, you use a [Policy](#Policy) like you normally would, and call `.circuitBreaker()`. The first argument is the number of milliseconds after which we should try to close the circuit after failure ('closing the circuit' means restarting requests). The second argument is the breaker policy.
+
+Calls to `execute()` while the circuit is open (not taking requests) will throw a `BrokenCircuitError`.
+
+```js
+import { Policy, BrokenCircuitError, ConsecutiveBreaker, SamplingBreaker } from 'cockatiel';
+
+// Break if more than 20% of requests fail in a 30 second time window:
+const breaker = Policy
+ .handleAll()
+ .circuitBreaker(10 * 1000, new SamplingBreaker({ threshold: 0.2, duration: 30 * 1000 }));
+
+// Break if more than 5 requests in a row fail:
+const breaker = Policy
+ .handleAll()
+ .circuitBreaker(10 * 1000, new ConsecutiveBreaker(5));
+
+// Get info from the database, or return 'service unavailable' if it's down/recovering
+export async function handleRequest() {
+  try {
+    return await breaker.execute(() => getInfoFromDatabase());
+  } catch (e) {
+    if (e instanceof BrokenCircuitError) {
+      return 'service unavailable';
+    } else {
+      throw e;
+    }
+  }
+}
+```
+
+### `ConsecutiveBreaker`
+
+The `ConsecutiveBreaker` breaks after `n` requests in a row fail. Simple, easy.
+
+```js
+// Break if more than 5 requests in a row fail:
+const breaker = Policy
+ .handleAll()
+ .circuitBreaker(10 * 1000, new ConsecutiveBreaker(5));
+```
+
+### `SamplingBreaker`
+
+The `SamplingBreaker` breaks after a proportion of requests over a time period fail.
+
+```js
+// Break if more than 20% of requests fail in a 30 second time window:
+const breaker = Policy
+ .handleAll()
+ .circuitBreaker(10 * 1000, new SamplingBreaker({ threshold: 0.2, duration: 30 * 1000 }));
+```
+
+You can specify a minimum requests-per-second value to use to avoid closing the circuit under period of low load. By default we'll choose a value such that you need 5 failures per second for the breaker to kick in, and you can configure this if it doesn't work for you:
+
+```js
+const breaker = Policy
+ .handleAll()
+ .circuitBreaker(10 * 1000, new SamplingBreaker({
+   threshold: 0.2,
+   duration: 30 * 1000,
+   minimumRps: 10, // require 10 requests per second before we can break
+  }));
+```
+
+### `breaker.execute(fn)`
+
+Executes the function. May throw a `BrokenCircuitError` if the circuit is open. Otherwise, it calls the inner function and returns what it returns, or throws what it throws.
+
+```ts
+const response = await breaker.execute(() => getJson('https://example.com'));
+```
+
+### `breaker.state`
+
+The current state of the circuit breaker, allowing for introspection.
+
+```js
+import { CircuitState } from 'cockatiel';
+
+// ...
+
+if (breaker.state === CircuitState.Open) {
+  console.log('the circuit is open right now');
+}
+```
+
+### `breaker.onBreak(callback)`
+
+A method on the circuit breaker that gives you a callback fired when the circuit opens as a result of failures. Returns a disposable instance.
+
+```js
+const listener = breaker.onBreak(() => console.log('circuit is open'));
+
+// later:
+listener.dispose();
+```
+
+### `breaker.onReset(callback)`
+
+A method on the circuit breaker that gives you a callback fired when the circuit closes after being broken. Returns a disposable instance.
+
+```js
+const listener = breaker.onReset(() => console.log('circuit is closed'));
+
+// later:
+listener.dispose();
+```
+
+### `breaker.isolate()`
+
+Manually holds the circuit open, until the returned disposable is disposed of. While held open, the circuit will throw `IsolatedCircuitError`, a type of `BrokenCircuitError`, on attempted executions. It's safe to have multiple `isolate()` calls; we'll refcount them behind the scenes.
+
+```js
+const handle = breaker.isolate();
+
+// later, allow calls again:
+handle.dispose();
 ```
