@@ -3,6 +3,8 @@ import { CompositeBackoff, CompositeBias } from './backoff/CompositeBackoff';
 import { ConstantBackoff } from './backoff/ConstantBackoff';
 import { DelegateBackoff, DelegateBackoffFn } from './backoff/DelegateBackoff';
 import { IterableBackoff } from './backoff/IterableBackoff';
+import { execute } from './common/execute';
+import { FailureReason, IBasePolicyOptions } from './Policy';
 
 const delay = (duration: number) => new Promise(resolve => setTimeout(resolve, duration));
 
@@ -24,12 +26,10 @@ export interface IRetryBackoffContext<R> extends IRetryContext {
    * The result of the last method call. Either a thrown error, or a value
    * that we determined should be retried upon.
    */
-  result: { error: Error } | { value: R };
+  result: FailureReason<R>;
 }
 
-export interface IRetryPolicyConfig<R> {
-  errorFilter: (e: Error) => boolean;
-  resultFilter: (e: R) => boolean;
+export interface IRetryPolicyConfig<R> extends IBasePolicyOptions<R> {
   backoff?: IBackoff<IRetryBackoffContext<R>>;
 }
 
@@ -78,20 +78,9 @@ export class RetryPolicy<R> {
     let backoff: IBackoff<IRetryBackoffContext<R>> | undefined =
       this.options.backoff || new ConstantBackoff(0, 1);
     for (let retries = 0; ; retries++) {
-      let result: { value: T } | { error: Error };
-      try {
-        const value = await fn({ attempt: 0 });
-        if (!this.options.resultFilter(value)) {
-          return value;
-        }
-
-        result = { value };
-      } catch (error) {
-        if (!this.options.errorFilter(error)) {
-          throw error;
-        }
-
-        result = { error };
+      const result = await execute(this.options, fn, { attempt: retries });
+      if ('success' in result) {
+        return result.success;
       }
 
       if (backoff) {
