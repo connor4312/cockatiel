@@ -8,11 +8,11 @@
   "scripts": {
     "prepublish": "npm run compile",
     "test": "rimraf dist && tsc && npm run test:unit && npm run test:lint && npm test:fmt",
-    "test:cover": "nyc npm run test:unit",
+    "test:cover": "rimraf dist && tsc && nyc npm run test:unit",
     "test:unit": "mocha --opts mocha.opts",
     "test:lint": "tslint -p tsconfig.json",
     "test:fmt": "prettier --list-different \"src/**/*.ts\"",
-    "fmt": "prettier --write \"src/**/*.ts\"",
+    "fmt": "prettier --write \"src/**/*.ts\" && npm run test:lint -- --fix",
     "compile": "rimraf dist && tsc && tsc -p tsconfig.esm.json",
     "watch": "rimraf dist && tsc --watch"
   },

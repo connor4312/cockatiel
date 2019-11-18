@@ -1,10 +1,10 @@
-import { CircuitBreakerPolicy, CircuitState } from './CircuitBreakerPolicy';
-import { Policy } from './Policy';
-import { ConsecutiveBreaker } from './breaker/Breaker';
-import { stub, SinonFakeTimers, useFakeTimers, SinonStub } from 'sinon';
 import { expect } from 'chai';
+import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
+import { ConsecutiveBreaker } from './breaker/Breaker';
+import { CircuitBreakerPolicy, CircuitState } from './CircuitBreakerPolicy';
 import { BrokenCircuitError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
+import { Policy } from './Policy';
 
 class MyException extends Error {}
 
