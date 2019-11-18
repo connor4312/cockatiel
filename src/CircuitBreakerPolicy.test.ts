@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
+import { promisify } from 'util';
 import { ConsecutiveBreaker } from './breaker/Breaker';
 import { CircuitBreakerPolicy, CircuitState } from './CircuitBreakerPolicy';
 import { BrokenCircuitError } from './errors/Errors';
@@ -8,7 +9,7 @@ import { Policy } from './Policy';
 
 class MyException extends Error {}
 
-const delay = (duration: number) => new Promise(resolve => setTimeout(resolve, duration));
+const delay = promisify(setTimeout);
 
 describe('CircuitBreakerPolicy', () => {
   let p: CircuitBreakerPolicy<unknown>;
@@ -17,7 +18,7 @@ describe('CircuitBreakerPolicy', () => {
   let onReset: SinonStub;
 
   beforeEach(() => {
-    p = Policy.handleType(MyException).circuitBreaker(new ConsecutiveBreaker(2), 1000);
+    p = Policy.handleType(MyException).circuitBreaker(1000, new ConsecutiveBreaker(2));
     clock = useFakeTimers();
     onBreak = stub();
     onReset = stub();

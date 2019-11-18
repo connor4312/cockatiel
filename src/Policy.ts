@@ -200,7 +200,7 @@ export class Policy<ReturnType> {
    * @param halfOpenAfter -- Time after failures to try to open the circuit
    * breaker again. Defaults to 10 seconds.
    */
-  public circuitBreaker(breaker: IBreaker, halfOpenAfter = 10 * 1000) {
+  public circuitBreaker(halfOpenAfter: number, breaker: IBreaker) {
     return new CircuitBreakerPolicy({
       ...this.options,
       breaker,

@@ -25,7 +25,7 @@ export class EventEmitter<T> {
    * Emits event data.
    */
   public emit(data: T) {
-    for (const listener of [...this.listeners]) {
+    for (const listener of this.listeners) {
       listener(data);
     }
   }

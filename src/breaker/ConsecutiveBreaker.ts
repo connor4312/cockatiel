@@ -1,4 +1,3 @@
-import { CircuitState } from '../CircuitBreakerPolicy';
 import { IBreaker } from './Breaker';
 
 /**
@@ -15,7 +14,6 @@ export class ConsecutiveBreaker implements IBreaker {
    */
   public success() {
     this.count = 0;
-    return CircuitState.Open;
   }
 
   /**

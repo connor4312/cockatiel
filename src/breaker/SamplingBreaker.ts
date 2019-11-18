@@ -42,25 +42,9 @@ export class SamplingBreaker implements IBreaker {
   private currentFailures = 0;
   private currentSuccesses = 0;
 
-  /**
-   * Gets a snapshot of internal breaker state. Used for tests.
-   */
-  public get state() {
-    return {
-      threshold: this.threshold,
-      minimumRpms: this.minimumRpms,
-      duration: this.duration,
-      windowSize: this.windowSize,
-      windows: this.windows.map(w => ({ ...w })),
-      currentWindow: this.currentWindow,
-      currentFailures: this.currentFailures,
-      currentSuccesses: this.currentSuccesses,
-    };
-  }
-
   constructor({ threshold, duration: samplingDuration, minimumRps }: ISamplingBreakerOptions) {
     if (threshold <= 0 || threshold >= 1) {
-      throw new Error(`SamplingBreaker threshold should be between (0, 1), got ${threshold}`);
+      throw new RangeError(`SamplingBreaker threshold should be between (0, 1), got ${threshold}`);
     }
 
     this.threshold = threshold;
@@ -100,35 +84,28 @@ export class SamplingBreaker implements IBreaker {
   public failure(state: CircuitState) {
     this.push(false);
 
-    switch (state) {
-      case CircuitState.HalfOpen:
-        return true;
-      case CircuitState.Closed:
-        // If we don't have enough rps, then the circuit is open.
-        // 1. `(failures + successes) / samplingDuration` gets rps
-        // 2. We want `rpms < minimumRpms`
-        // 3. Simplifies to `failures + successes < samplingDuration * minimumRps`
-        if (this.currentFailures + this.currentSuccesses < this.duration * this.minimumRpms) {
-          return false;
-        }
-
-        // If we're above threshold, open the circuit
-        // 1. `failures / total > threshold`
-        // 2. `failures > threshold * total`
-        if (
-          this.currentFailures >
-          this.threshold * (this.currentSuccesses + this.currentFailures)
-        ) {
-          return true;
-        }
-
-        return false;
-      case CircuitState.Open:
-      case CircuitState.Isolated:
-        return true;
-      default:
-        throw new Error(`unknown state ${state}`);
+    if (state !== CircuitState.Closed) {
+      return true;
     }
+
+    const total = this.currentSuccesses + this.currentFailures;
+
+    // If we don't have enough rps, then the circuit is open.
+    // 1. `total / samplingDuration` gets rps
+    // 2. We want `rpms < minimumRpms`
+    // 3. Simplifies to `total < samplingDuration * minimumRps`
+    if (total < this.duration * this.minimumRpms) {
+      return false;
+    }
+
+    // If we're above threshold, open the circuit
+    // 1. `failures / total > threshold`
+    // 2. `failures > threshold * total`
+    if (this.currentFailures > this.threshold * total) {
+      return true;
+    }
+
+    return false;
   }
 
   private resetWindows() {

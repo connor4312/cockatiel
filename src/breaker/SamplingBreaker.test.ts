@@ -5,39 +5,60 @@ import { SamplingBreaker } from './SamplingBreaker';
 
 use(require('chai-subset'));
 
+const getState = (b: SamplingBreaker) => {
+  const untyped: any = b;
+  return {
+    threshold: untyped.threshold,
+    minimumRpms: untyped.minimumRpms,
+    duration: untyped.duration,
+    windowSize: untyped.windowSize,
+    windows: untyped.windows.map((w: object) => ({ ...w })),
+    currentWindow: untyped.currentWindow,
+    currentFailures: untyped.currentFailures,
+    currentSuccesses: untyped.currentSuccesses,
+  };
+};
+
 describe('SamplingBreaker', () => {
   describe('parameter creation', () => {
+    it('rejects if threshold out of range', () => {
+      expect(() => new SamplingBreaker({ threshold: -1, duration: 10 })).to.throw(RangeError);
+      expect(() => new SamplingBreaker({ threshold: 0, duration: 10 })).to.throw(RangeError);
+      expect(() => new SamplingBreaker({ threshold: 1, duration: 10 })).to.throw(RangeError);
+      expect(() => new SamplingBreaker({ threshold: 10, duration: 10 })).to.throw(RangeError);
+    });
+
     it('creates good initial params', () => {
-      const b = new SamplingBreaker({ threshold: 0.2, duration: 10 * 1000, minimumRps: 5 });
-      expect(b.state).to.containSubset({
+      const b = new SamplingBreaker({ threshold: 0.2, duration: 10_000, minimumRps: 5 });
+      expect(getState(b)).to.containSubset({
         threshold: 0.2,
-        duration: 10 * 1000,
+        duration: 10_000,
         minimumRpms: 5 / 1000,
         windowSize: 1000,
       });
 
-      expect(b.state.windows).to.have.lengthOf(10);
+      expect(getState(b).windows).to.have.lengthOf(10);
     });
 
     it('creates initial params for small durations', () => {
       const b = new SamplingBreaker({ threshold: 0.2, duration: 103, minimumRps: 5 });
-      expect(b.state).to.containSubset({
+      expect(getState(b)).to.containSubset({
         threshold: 0.2,
         duration: 105,
         minimumRpms: 5 / 1000,
         windowSize: 21,
       });
-      expect(b.state.windows).to.have.lengthOf(5);
+      expect(getState(b).windows).to.have.lengthOf(5);
     });
 
     it('creates guess for rpms', () => {
       const b1 = new SamplingBreaker({ threshold: 0.2, duration: 103 });
       // needs at least 5 failures/sec, threshold of 0.2 means 5 * 5 total req/s
-      expect(b1.state.minimumRpms).to.equal(25 / 1000);
+      expect(getState(b1).minimumRpms).to.equal(25 / 1000);
 
       const b2 = new SamplingBreaker({ threshold: 0.25, duration: 103 });
       // 5 * 4 here
-      expect(b2.state.minimumRpms).to.equal(20 / 1000);
+      expect(getState(b2).minimumRpms).to.equal(20 / 1000);
     });
   });
 
@@ -46,7 +67,7 @@ describe('SamplingBreaker', () => {
     let clock: SinonFakeTimers;
 
     beforeEach(() => {
-      b = new SamplingBreaker({ threshold: 0.5, duration: 5 * 1000, minimumRps: 3 });
+      b = new SamplingBreaker({ threshold: 0.5, duration: 5_000, minimumRps: 3 });
       clock = useFakeTimers();
     });
 
@@ -65,12 +86,12 @@ describe('SamplingBreaker', () => {
         clock.tick(1000);
       }
 
-      expect(b.state).to.containSubset({
+      expect(getState(b)).to.containSubset({
         currentFailures: 20,
         currentSuccesses: 40,
         currentWindow: 1,
       });
-      expect(b.state.windows).to.deep.equal([
+      expect(getState(b).windows).to.deep.equal([
         { failures: 5, successes: 10, startedAt: 5000 },
         { failures: 6, successes: 12, startedAt: 6000 },
         { failures: 2, successes: 4, startedAt: 2000 },
@@ -85,7 +106,7 @@ describe('SamplingBreaker', () => {
     let clock: SinonFakeTimers;
 
     const createTestBreaker = () =>
-      (b = new SamplingBreaker({ threshold: 0.5, duration: 5 * 1000, minimumRps: 3 }));
+      (b = new SamplingBreaker({ threshold: 0.5, duration: 5_000, minimumRps: 3 }));
 
     beforeEach(() => {
       createTestBreaker();
@@ -137,7 +158,7 @@ describe('SamplingBreaker', () => {
       }
 
       b.success(CircuitState.HalfOpen);
-      expect(b.state.currentFailures).to.equal(0);
+      expect(getState(b).currentFailures).to.equal(0);
       expect(b.failure(CircuitState.Closed)).to.be.false;
     });
   });

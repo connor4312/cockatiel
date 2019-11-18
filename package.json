@@ -6,7 +6,7 @@
   "module": "dist/esm/index.js",
   "sideEffects": false,
   "scripts": {
-    "prepublish": "npm run compile",
+    "prepublishOnly": "npm run compile",
     "test": "rimraf dist && tsc && npm run test:unit && npm run test:lint && npm run test:fmt",
     "test:cover": "rimraf dist && tsc && nyc npm run test:unit",
     "test:unit": "mocha --opts mocha.opts",
@@ -82,8 +82,5 @@
     "printWidth": 100,
     "singleQuote": true,
     "trailingComma": "all"
-  },
-  "dependencies": {
-    "rxjs": "^6.5.3"
   }
 }
