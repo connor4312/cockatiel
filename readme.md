@@ -19,13 +19,13 @@ Cockatiel is a work-in progress; this serves as a table of contents and progress
   - [IterableBackoff](#IterableBackoff)
   - [DelegateBackoff](#DelegateBackoff)
   - [CompositeBackoff](#CompositeBackoff)
-- [x] [Retries](#retries)
+- [x] [Policy.retry](#policyretry)
   - [retry.execute(fn)](#retryexecutefn)
   - [retry.attempts(count)](#retryattemptscount)
   - [retry.delay(amount)](#retrydelayamount)
   - [retry.delegate(fn)](#retrydelegatefn)
   - [retry.backoff(policy)](#retrybackoffpolicy)
-- [x] [Circuit Breaker](#circuit-breaker)
+- [x] [Policy.circuitBreaker](#policycircuitbreakeropenafter-breaker)
   - [ConsecutiveBreaker](#ConsecutiveBreaker)
   - [SamplingBreaker](#SamplingBreaker)
   - [breaker.execute(fn)](#breakerexecutefn)
@@ -34,11 +34,15 @@ Cockatiel is a work-in progress; this serves as a table of contents and progress
   - [breaker.onReset(callback)](#breakeronresetcallback)
   - [breaker.isolate()](#breakerisolate)
 - [ ] Timeout
-- [ ] Bulkhead Isolation
+- [x] [Policy.bulkhead](#policybulkheadlimit-queue)
+  - [bulkhead.execute(fn)](#bulkheadexecutefn)
+  - [bulkhead.onReject(callback)](#bulkheadonrejectcallback)
+  - [bulkhead.executionSlots](#bulkheadexecutionslots)
+  - [bulkhead.queueSlots](#bulkheadqueueslots)
 - [ ] Cache (may be out of scope?)
 - [ ] Fallback
 
-## Policy
+## `Policy`
 
 The Policy defines how errors and results are handled. Everything in Cockatiel ultimately deals with handling errors or bad results. The Policy sets up how
 
@@ -133,7 +137,7 @@ const limitedBackoff = new ConstantBackoff(50, 3);
 
 ### ExponentialBackoff
 
-> Tip: exponential backoffs and [circuit breakers](#circuit-breaker) are great friends!
+> Tip: exponential backoffs and [circuit breakers](#policycircuitbreaker) are great friends!
 
 The crowd favorite. Takes in an options object, which can have any of these properties:
 
@@ -244,7 +248,7 @@ const backoff = new CompositeBackoff(
 );
 ```
 
-## Retries
+## `Policy.retry()`
 
 If you know how to use Polly, you already almost know how to use Cockatiel. The `Policy` object is the base builder, and you can get a RetryBuilder off of that by calling `.retry()`.
 
@@ -333,7 +337,7 @@ Policy
   // ...
 ```
 
-## Circuit Breaker
+## `Policy.circuitBreaker(openAfter, breaker)`
 
 Circuit breakers stop execution for a period of time after a failure threshold has been reached. This is very useful to allow faulting systems to recover without overloading them. See the [Polly docs](https://github.com/App-vNext/Polly/wiki/Circuit-Breaker#how-the-polly-circuitbreaker-works) for more detailed information around circuit breakers.
 
@@ -458,3 +462,63 @@ const handle = breaker.isolate();
 // later, allow calls again:
 handle.dispose();
 ```
+
+## `Policy.bulkhead(limit[, queue])`
+
+A Bulkhead is a simple structure that limits the number of concurrent calls. Attempting to exceed the capacity will cause `execute()` to throw a `BulkheadRejectedError`.
+
+```js
+import { Policy } from 'cockatiel';
+
+const bulkhead = Policy.bulkhead(12); // limit to 12 concurrent calls
+
+// Get info from the database, or return if there's too much load
+export async function handleRequest() {
+  try {
+    return await bulkhead.execute(() => getInfoFromDatabase());
+  } catch (e) {
+    if (e instanceof BulkheadRejectedError) {
+      return 'too much load, try again later';
+    } else {
+      throw e;
+    }
+  }
+}
+```
+
+You can optionally pass a second parameter to `bulkhead()`, which will allow for events to be queued instead of rejected after capacity is exceeded. Once again, if this queue fills up, a `BulkheadRejectedError` will be thrown.
+
+```js
+const bulkhead = Policy.bulkhead(12, 4); // limit to 12 concurrent calls, with 4 queued up
+```
+
+### `bulkhead.execute(fn)`
+
+Depending on the bulkhead state, either:
+
+- Executes the function immediately and returns its results;
+- Queues the function for execution and returns its results when it runs, or;
+- Throws a `BulkheadRejectedError` if the configured concurrency and queue limits have been execeeded.
+
+```js
+const data = await bulkhead.execute(() => getInfoFromDatabase());
+```
+
+### `bulkhead.onReject(callback)`
+
+A method on the bulkhead that gives you a callback fired when a call is rejected. Useful for telemetry. Returns a disposable instance.
+
+```js
+const listener = bulkhead.onReject(() => console.log('bulkhead call was rejected'));
+
+// later:
+listener.dispose();
+```
+
+### `bulkhead.executionSlots`
+
+Returns the number of execution slots left in the bulkhead. If either this or `bulkhead.queueSlots` is greater than zero, the `execute()` will not throw a `BulkheadRejectedError`.
+
+### `bulkhead.queueSlots`
+
+Returns the number of queue slots left in the bulkhead. If either this or `bulkhead.executionSlots` is greater than zero, the `execute()` will not throw a `BulkheadRejectedError`.

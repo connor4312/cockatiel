@@ -1,4 +1,5 @@
 import { IBreaker } from './breaker/Breaker';
+import { Bulkhead } from './Bulkhead';
 import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
 import { RetryPolicy } from './RetryPolicy';
 
@@ -26,6 +27,13 @@ export type FailureReason<R> = { error: Error } | { value: R };
  * breakers, retries, etc.
  */
 export class Policy<ReturnType> {
+  /**
+   * Creates a bulkhead--a policy that limits the number of concurrent calls.
+   */
+  public static bulkhead(limit: number, queue: number = 0) {
+    return new Bulkhead(limit, queue);
+  }
+
   /**
    * Creates a retry policy that handles all errors.
    */
