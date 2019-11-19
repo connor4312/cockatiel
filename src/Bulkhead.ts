@@ -61,7 +61,7 @@ export class Bulkhead {
     }
 
     this.onRejectEmitter.emit();
-    throw new BulkheadRejectedError();
+    throw new BulkheadRejectedError(this.capacity, this.queueCapacity);
   }
 
   private dequeue() {
