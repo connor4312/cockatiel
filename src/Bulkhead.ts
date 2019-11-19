@@ -13,7 +13,7 @@ interface IQueueItem<T> {
  */
 export class Bulkhead {
   private active = 0;
-  private queue: Array<IQueueItem<any>> = [];
+  private queue: Array<IQueueItem<unknown>> = [];
   private onRejectEmitter = new EventEmitter<void>();
 
   /**
