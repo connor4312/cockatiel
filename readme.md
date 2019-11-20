@@ -19,6 +19,13 @@ Cockatiel is a work-in progress; this serves as a table of contents and progress
   - [IterableBackoff](#IterableBackoff)
   - [DelegateBackoff](#DelegateBackoff)
   - [CompositeBackoff](#CompositeBackoff)
+- [x] [CancellationToken](#cancellationtoken)
+  - [new CancellationTokenSource([parent])](#new-cancellationtokensourceparent)
+  - [cancellationTokenSource.token](#cancellationtokensourcetoken)
+  - [cancellationTokenSource.cancel()](#cancellationtokensourcecancel)
+  - [cancellationToken.isCancellationRequested](#cancellationtokeniscancellationrequested)
+  - [cancellationToken.onCancellationRequested(listener)](#cancellationtokenoncancellationrequestedlistener)
+  - [cancellationToken.cancelled()](#cancellationtokencancelledcancellationToken)
 - [x] [Policy.retry](#policyretry)
   - [retry.execute(fn)](#retryexecutefn)
   - [retry.attempts(count)](#retryattemptscount)
@@ -33,14 +40,16 @@ Cockatiel is a work-in progress; this serves as a table of contents and progress
   - [breaker.onBreak(callback)](#breakeronbreakcallback)
   - [breaker.onReset(callback)](#breakeronresetcallback)
   - [breaker.isolate()](#breakerisolate)
-- [ ] Timeout
+- [x] [Policy.timeout](#policytimeoutduration-strategy)
+  - [timeout.execute(fn)](#timeoutexecutefn)
+  - [timeout.onTimeout(listener)](#timeoutontimeoutlistener)
 - [x] [Policy.bulkhead](#policybulkheadlimit-queue)
   - [bulkhead.execute(fn)](#bulkheadexecutefn)
   - [bulkhead.onReject(callback)](#bulkheadonrejectcallback)
   - [bulkhead.executionSlots](#bulkheadexecutionslots)
   - [bulkhead.queueSlots](#bulkheadqueueslots)
-- [ ] Cache (may be out of scope?)
 - [ ] Fallback
+- [ ] PolicyWrap
 
 ## `Policy`
 
@@ -246,6 +255,88 @@ const backoff = new CompositeBackoff(
   myDelegateBackoff,
   new ConstantBackoff(/* delay */ 0, /* attempts */ 5),
 );
+```
+
+## `CancellationToken`
+
+Cancellation tokens are prominent in C# land to allow for cooperative cancellation. They're used here for [timeouts](#policytimeoutdurationstrategy).
+
+The `CancellationTokenSource` is the 'factory' that creates `CancellationTokens`, and can be used to cancel and operation. Once cancellation is requested, an event will be emitted on all linked tokens. You can nest cancellation tokens and sources, cancellation cascades down.
+
+```ts
+import { CancellationTokenSource } from 'cockatiel';
+
+const source1 = new CancellationTokenSource();
+const token1 = source1.token;
+
+// You can listen to an event, await a promise, or just check a synchronous value...
+token1.onCancellationRequested(() => console.log('source1 cancelled');
+token1.cancellation().then(() => { /* ... */ });
+
+if (token1.isCancellationRequested) {
+  console.log('source1 already cancelled!');
+}
+
+// You can the nest new cancellation token sources:
+const source2 = new CancellationTokenSource(token1);
+source2.onCancellationRequested(() => console.log('source2 cancelled');
+
+// And, finally, cancel tokens, which will cascade down to all children:
+source1.cancel();
+// => source1 cancelled
+// => source2 cancelled
+```
+
+### `new CancellationTokenSource([parent])`
+
+Creates a new CancellationTokenSource, optionally linked to the parent token.
+
+```ts
+const source1 = new CancellationTokenSource();
+const source2 = new CancellationTokenSource(token1);
+```
+
+### `cancellationTokenSource.token`
+
+Returns the [CancellationToken](#cancellationtokeniscancellationrequested)
+
+### `cancellationTokenSource.cancel()`
+
+Cancells all tokens linked to the source, and all child sources.
+
+```ts
+source.token.onCancellationRequested(() => console.log('source cancelled');
+source.cancel();
+// => source cancelled
+```
+
+### `cancellationToken.isCancellationRequested`
+
+Returns whether cancellation has yet been requested.
+
+```ts
+if (token.isCancellationRequested) {
+  console.log('source1 already cancelled!');
+}
+```
+
+### `cancellationToken.onCancellationRequested(listener)`
+
+Returns whether cancellation has yet been requested.
+
+```ts
+const listener = token.onCancellationRequested(() => console.log('cancellation requested'))
+
+// later:
+listener.dispose();
+```
+
+### `cancellationToken.cancelled([cancellationToken])`
+
+Returns a promise that resolves once cancellation is requested. You can optionally pass in another cancellation token to this method, to cancel waiting on the event.
+
+```ts
+await token.cancelled();
 ```
 
 ## `Policy.retry()`
@@ -461,6 +552,48 @@ const handle = breaker.isolate();
 
 // later, allow calls again:
 handle.dispose();
+```
+
+## `Policy.timeout(duration, strategy)`
+
+Creates a timeout policy. The duration specifies how long to wait before timing out `execute()`'d functions. The strategy for timeouts, "Cooperative" or "Aggressive". A [ CancellationToken](#cancellationtoken) will be pass to any executed function, and in cooperative timeouts we'll simply wait for that function to return or throw. In aggressive timeouts, we'll immediately throw a TaskCancelledError when the timeout is reached, in addition to marking the passed token as failed.
+```js
+import { TimeoutStrategy, Policy, TaskCancelledError } from 'cockatiel';
+
+const timeout = Policy.timeout(2000, TimeoutStrategy.Cooperative);
+
+// Get info from the database, or return if it didn't respond in 2 seconds
+export async function handleRequest() {
+  try {
+    return await timeout.execute(
+      cancellationToken => getInfoFromDatabase(cancellationToken));
+  } catch (e) {
+    if (e instanceof TaskCancelledError) {
+      return 'database timed out';
+    } else {
+      throw e;
+    }
+  }
+}
+```
+
+### `timeout.execute(fn)`
+
+Executes the given function as configured in the policy. A [ CancellationToken](#cancellationtoken) will be pass to the function, which it should use for aborting operations as needed.
+
+```ts
+await timeout.execute(cancellationToken => getInfoFromDatabase(cancellationToken))
+```
+
+### `timeout.onTimeout(listener)`
+
+A method on the timeout that gives you a callback fired when a timeout is reached. Useful for telemetry. Returns a disposable instance.
+
+```ts
+const listener = timeout.onTimeout(() => console.log('timeout was reached'));
+
+// later:
+listener.dispose();
 ```
 
 ## `Policy.bulkhead(limit[, queue])`

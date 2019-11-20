@@ -2,6 +2,7 @@ import { IBreaker } from './breaker/Breaker';
 import { Bulkhead } from './Bulkhead';
 import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
 import { RetryPolicy } from './RetryPolicy';
+import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
 type Constructor<T> = new (...args: any) => T;
 
@@ -66,6 +67,20 @@ export class Policy<ReturnType> {
    */
   public static handleWhenResult<T>(predicate: (error: T) => boolean) {
     return new Policy({ errorFilter: never, resultFilter: predicate });
+  }
+
+  /**
+   * Creates a timeout policy.
+   * @param duration - How long to wait before timing out execute()'d functions
+   * @param strategy - Strategy for timeouts, "Cooperative" or "Aggressive".
+   * A {@link CancellationToken} will be pass to any executed function, and in
+   * cooperative timeouts we'll simply wait for that function to return or
+   * throw. In aggressive timeouts, we'll immediately throw a
+   * {@link TaskCancelledError} when the timeout is reached, in addition to
+   * marking the passed token as failed.
+   */
+  public static timeout(duration: number, strategy: TimeoutStrategy) {
+    return new TimeoutPolicy(duration, strategy);
   }
 
   protected constructor(private readonly options: Readonly<IBasePolicyOptions<ReturnType>>) {}
