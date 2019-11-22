@@ -3,7 +3,7 @@ import { EventEmitter } from './common/Event';
 import { execute, returnOrThrow } from './common/execute';
 import { BrokenCircuitError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
-import { FailureReason, IBasePolicyOptions } from './Policy';
+import { FailureReason, IBasePolicyOptions, IPolicy } from './Policy';
 
 export enum CircuitState {
   /**
@@ -40,7 +40,7 @@ type InnerState =
   | { value: CircuitState.Open; openedAt: number }
   | { value: CircuitState.HalfOpen; test: Promise<any> };
 
-export class CircuitBreakerPolicy<R> {
+export class CircuitBreakerPolicy<R> implements IPolicy<void, R> {
   private readonly breakEmitter = new EventEmitter<FailureReason<R> | { isolated: true }>();
   private readonly resetEmitter = new EventEmitter<void>();
   private innerLastFailure?: FailureReason<R>;
@@ -110,7 +110,7 @@ export class CircuitBreakerPolicy<R> {
    * open via {@link CircuitBreakerPolicy.isolate}
    * @returns a Promise that resolves or rejects with the function results.
    */
-  public async execute<T extends R>(fn: () => Promise<T> | T): Promise<T> {
+  public async execute<T extends R>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
     const state = this.innerState;
     switch (state.value) {
       case CircuitState.Closed:
@@ -146,7 +146,7 @@ export class CircuitBreakerPolicy<R> {
     }
   }
 
-  private async halfOpen<T extends R>(fn: () => Promise<T> | T): Promise<T> {
+  private async halfOpen<T extends R>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
     try {
       const result = await execute(this.options, fn);
       if ('success' in result) {

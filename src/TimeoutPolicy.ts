@@ -1,6 +1,7 @@
 import { CancellationToken, CancellationTokenSource } from './CancellationToken';
 import { EventEmitter } from './common/Event';
 import { TaskCancelledError } from './errors/TaskCancelledError';
+import { IPolicy } from './Policy';
 
 export enum TimeoutStrategy {
   /**
@@ -15,7 +16,11 @@ export enum TimeoutStrategy {
   Aggressive = 'aggressive',
 }
 
-export class TimeoutPolicy {
+export interface ICancellationContext {
+  cancellation: CancellationToken;
+}
+
+export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   private readonly timeoutEmitter = new EventEmitter<void>();
 
   /**
@@ -31,19 +36,17 @@ export class TimeoutPolicy {
    * @param fn -- Function to execute. Takes in a nested cancellation token.
    * @throws a {@link TaskCancelledError} if a timeout occurs
    */
-  public async execute<T>(
-    fn: (cancellationToken: CancellationToken) => PromiseLike<T> | T,
-  ): Promise<T> {
+  public async execute<T>(fn: (context: ICancellationContext) => PromiseLike<T> | T): Promise<T> {
     const cts = new CancellationTokenSource();
     const timer = setTimeout(() => cts.cancel(), this.duration);
 
     try {
       if (this.strategy === TimeoutStrategy.Cooperative) {
-        return await fn(cts.token);
+        return await fn({ cancellation: cts.token });
       }
 
       return Promise.race<T>([
-        fn(cts.token),
+        fn({ cancellation: cts.token }),
         cts.token.cancellation(cts.token).then(() => {
           throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);
         }),

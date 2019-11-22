@@ -16,7 +16,7 @@ export const returnOrThrow = <R>(failure: FailureOrSuccess<R>) => {
 
 export const execute = async <T extends any[], R>(
   options: Readonly<IBasePolicyOptions<R>>,
-  fn: (...args: T) => Promise<R> | R,
+  fn: (...args: T) => PromiseLike<R> | R,
   ...args: T
 ): Promise<FailureOrSuccess<R>> => {
   try {

@@ -16,10 +16,10 @@ describe('TimeoutPolicy', () => {
   it('properly cooperatively cancels', async () => {
     const policy = Policy.timeout(2, TimeoutStrategy.Cooperative);
     expect(
-      await policy.execute(async ct => {
-        expect(ct.isCancellationRequested).to.be.false;
+      await policy.execute(async ({ cancellation }) => {
+        expect(cancellation.isCancellationRequested).to.be.false;
         await delay(3);
-        expect(ct.isCancellationRequested).to.be.true;
+        expect(cancellation.isCancellationRequested).to.be.true;
         return 42;
       }),
     ).to.equal(42);
@@ -29,10 +29,10 @@ describe('TimeoutPolicy', () => {
     const policy = Policy.timeout(2, TimeoutStrategy.Aggressive);
     const verified = defer();
     await expect(
-      policy.execute(async ct => {
-        expect(ct.isCancellationRequested).to.be.false;
+      policy.execute(async ({ cancellation }) => {
+        expect(cancellation.isCancellationRequested).to.be.false;
         await delay(3);
-        expect(ct.isCancellationRequested).to.be.true;
+        expect(cancellation.isCancellationRequested).to.be.true;
         verified.resolve(undefined);
         return 42;
       }),

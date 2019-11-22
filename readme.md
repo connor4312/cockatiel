@@ -10,9 +10,16 @@ npm install --save cockatiel
 
 ## Contents
 
-Cockatiel is a work-in progress; this serves as a table of contents and progress checklist.
+This table lists the API which Cockatiel provides. I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) for more information for details and mechanics around the patterns we provide.
 
 - [x] Base [Policy](#policy)
+  - [Policy.handleAll()](#policyhandleAll)
+  - [Policy.handleType(ctor[, filter])](#policyhandletypector-filter)
+  - [Policy.handleWhen(filter)](#policyhandlewhen)
+  - [Policy.handleResultType(ctor[, filter])](#policyhandleresulttypector-filter)
+  - [Policy.handleResultWhen(filter)](#policyhandleresultwhenfilter)
+  - [Policy.wrap(policies)](#policywrappolicies)
+  - [Policy.noop](#policynoop)
 - [x] [Backoffs](#backoffs)
   - [ConstantBackoff](#constantConstantBackoffbackoff)
   - [ExponentialBackoff](#ExponentialBackoff)
@@ -26,12 +33,17 @@ Cockatiel is a work-in progress; this serves as a table of contents and progress
   - [cancellationToken.isCancellationRequested](#cancellationtokeniscancellationrequested)
   - [cancellationToken.onCancellationRequested(listener)](#cancellationtokenoncancellationrequestedlistener)
   - [cancellationToken.cancelled()](#cancellationtokencancelledcancellationToken)
+- [x] [Events](#events)
+  - [Event.toPromise(event[, cancellationToken])](#eventtopromiseevent-cancellationtoken)
+  - [Event.once(event, listener)](#eventonceeventlistener)
 - [x] [Policy.retry](#policyretry)
   - [retry.execute(fn)](#retryexecutefn)
   - [retry.attempts(count)](#retryattemptscount)
   - [retry.delay(amount)](#retrydelayamount)
   - [retry.delegate(fn)](#retrydelegatefn)
   - [retry.backoff(policy)](#retrybackoffpolicy)
+  - [retry.onRetry(listener)](#retryonretrylistener)
+  - [retry.onGiveUp(listener)](#retryongiveuplistener)
 - [x] [Policy.circuitBreaker](#policycircuitbreakeropenafter-breaker)
   - [ConsecutiveBreaker](#ConsecutiveBreaker)
   - [SamplingBreaker](#SamplingBreaker)
@@ -48,8 +60,9 @@ Cockatiel is a work-in progress; this serves as a table of contents and progress
   - [bulkhead.onReject(callback)](#bulkheadonrejectcallback)
   - [bulkhead.executionSlots](#bulkheadexecutionslots)
   - [bulkhead.queueSlots](#bulkheadqueueslots)
-- [ ] Fallback
-- [ ] PolicyWrap
+- [x] [Policy.fallback](#policyfallbackvalueorfactory)
+  - [fallback.execute(fn)](#fallbackexecutefn)
+  - [fallback.onFallback(callback)](#fallbackonfallbackcallback)
 
 ## `Policy`
 
@@ -101,8 +114,8 @@ Policy
   // ...
 ```
 
-### `Policy.handleResultWhen(filter])`
-### `policy.orWhenResult(filter])`
+### `Policy.handleResultWhen(filter)`
+### `policy.orWhenResult(filter)`
 
 Tells the policy to treat certain return values of the function as errors--retrying if they appear, for instance. Results will be retried the filter function returns true.
 
@@ -111,6 +124,47 @@ Policy
   .handleResultWhen(res => res.statusCode === 503)
   .orWhenResult(res => res.statusCode === 429)
   // ...
+```
+
+### `Policy.wrap(...policies)`
+
+Wraps the given set of policies into a single policy. For instance, this:
+
+```js
+const result = await retry.execute(() =>
+  breaker.execute(() =>
+    timeout.execute(({ cancellation }) => getData(cancellation))))
+```
+
+Is the equivalent to:
+
+```js
+const result = await Policy
+  .wrap(retry, breaker, timeout)
+  .execute(({ cancellation }) => getData(cancellation)));
+```
+
+The `context` argument passed to the executed function is the merged object of all previous policies. So for instance, in the above example you'll get the cancellation token from the [TimeoutPolicy](#policytimeout) as well as the attempt number from the [RetryPolicy](#policyretry):
+
+```ts
+Policy.wrap(retry, breaker, timeout).execute(context => {
+  console.log(context);
+  // => { attempts: 1, cancellation: }
+});
+```
+
+### `Policy.noop`
+
+A no-op policy, which may be useful for tests and stubs.
+
+```ts
+import { Policy } from 'cockatiel';
+
+const policy = isProduction ? Policy.handleAll().retry().attempts(3) : Policy.noop;
+
+export async function handleRequest() {
+  return policy.execute(() => getInfoFromDatabase());
+}
 ```
 
 ## Backoffs
@@ -322,7 +376,7 @@ if (token.isCancellationRequested) {
 
 ### `cancellationToken.onCancellationRequested(listener)`
 
-Returns whether cancellation has yet been requested.
+An [event emitter](#events) that fires when a cancellation is requested. Fires immediately if cancellation has already been requested. Returns a disposable instance.
 
 ```ts
 const listener = token.onCancellationRequested(() => console.log('cancellation requested'))
@@ -337,6 +391,53 @@ Returns a promise that resolves once cancellation is requested. You can optional
 
 ```ts
 await token.cancelled();
+```
+
+## Events
+
+Cockatiel uses a simple bespoke style for events, similar to those that we use in VS Code. These events provide better type-safety (you can never subscribe to the wrong event name) and better functionality around triggering listeners, which we use to implement cancellation tokens.
+
+An event can be subscribed to simply by passing a callback. Take [`onFallback`](#fallbackonfallbackcallback) for instance:
+
+```js
+const listener = policy.onFallback(error => {
+  console.log(error);
+});
+```
+
+The event returns an `IDisposable` instance. To unsubscribe the listener, call `.dispose()` on the returned instance. It's always safe to call an IDisposable's `.dispose()` multiple times.
+
+```js
+listener.dispose()
+```
+
+We provide a couple extra utilities around events as well.
+
+### `Event.toPromise(event[, cancellationToken])`
+
+Returns a promise that resolves once the event fires. Optionally, you can pass in a [CancellationToken](#cancellationtoken) to control when you stop listening, which will reject the promise with a `TaskCancelledError` if it's not already resolved.
+
+```js
+import { Event } from 'cockatiel';
+
+async function waitForFallback(policy) {
+  await Event.toPromise(policy.onFallback);
+  console.log('a fallback happened!');
+}
+```
+
+### `Event.once(callback)`
+
+Waits for the event to fire once, and then automatically unregisters the listener. This method itself returns an `IDisposable`, which you could use to unregister the listener if needed.
+
+```js
+import { Event } from 'cockatiel';
+
+async function waitForFallback(policy) {
+  Event.once(policy.onFallback, () => {
+    console.log('a fallback happened!');
+  });
+}
 ```
 
 ## `Policy.retry()`
@@ -426,6 +527,33 @@ Policy
   .retry()
   .backoff(myBackoff)
   // ...
+```
+
+### `retry.onRetry(listener)`
+
+An [event emitter](#events) that fires when we retry a call, before any backoff. It's invoked with an object that includes:
+
+ - the `delay` we're going to wait before retrying, and;
+ - either a thrown error like `{ error: someError, delay: number }`, or an errorful result in an object like `{ value: someValue, delay: number }` when using [result filtering](#policyhandleresulttypector-filter).
+
+Useful for telemetry. Returns a dispable instance.
+
+```js
+const listener = retry.onRetry(reason => console.log('retrying a function call:', reason));
+
+// ...
+listener.dispose();
+```
+
+### `retry.onGiveUp(listener)`
+
+An [event emitter](#events) that fires when we're no longer retrying a call and are giving up. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#policyhandleresulttypector-filter). Useful for telemetry. Returns a dispable instance.
+
+```js
+const listener = retry.onGiveUp(reason => console.log('retrying a function call:', reason));
+
+// ...
+listener.dispose();
 ```
 
 ## `Policy.circuitBreaker(openAfter, breaker)`
@@ -523,7 +651,7 @@ if (breaker.state === CircuitState.Open) {
 
 ### `breaker.onBreak(callback)`
 
-A method on the circuit breaker that gives you a callback fired when the circuit opens as a result of failures. Returns a disposable instance.
+An [event emitter](#events) that fires when the circuit opens as a result of failures. Returns a disposable instance.
 
 ```js
 const listener = breaker.onBreak(() => console.log('circuit is open'));
@@ -534,7 +662,7 @@ listener.dispose();
 
 ### `breaker.onReset(callback)`
 
-A method on the circuit breaker that gives you a callback fired when the circuit closes after being broken. Returns a disposable instance.
+An [event emitter](#events) that fires when the circuit closes after being broken. Returns a disposable instance.
 
 ```js
 const listener = breaker.onReset(() => console.log('circuit is closed'));
@@ -579,7 +707,7 @@ export async function handleRequest() {
 
 ### `timeout.execute(fn)`
 
-Executes the given function as configured in the policy. A [ CancellationToken](#cancellationtoken) will be pass to the function, which it should use for aborting operations as needed.
+Executes the given function as configured in the policy. A [CancellationToken](#cancellationtoken) will be pass to the function, which it should use for aborting operations as needed.
 
 ```ts
 await timeout.execute(cancellationToken => getInfoFromDatabase(cancellationToken))
@@ -587,7 +715,7 @@ await timeout.execute(cancellationToken => getInfoFromDatabase(cancellationToken
 
 ### `timeout.onTimeout(listener)`
 
-A method on the timeout that gives you a callback fired when a timeout is reached. Useful for telemetry. Returns a disposable instance.
+An [event emitter](#events) that fires when a timeout is reached. Useful for telemetry. Returns a disposable instance.
 
 ```ts
 const listener = timeout.onTimeout(() => console.log('timeout was reached'));
@@ -639,7 +767,7 @@ const data = await bulkhead.execute(() => getInfoFromDatabase());
 
 ### `bulkhead.onReject(callback)`
 
-A method on the bulkhead that gives you a callback fired when a call is rejected. Useful for telemetry. Returns a disposable instance.
+An [event emitter](#events) that fires when a call is rejected. Useful for telemetry. Returns a disposable instance.
 
 ```js
 const listener = bulkhead.onReject(() => console.log('bulkhead call was rejected'));
@@ -655,3 +783,38 @@ Returns the number of execution slots left in the bulkhead. If either this or `b
 ### `bulkhead.queueSlots`
 
 Returns the number of queue slots left in the bulkhead. If either this or `bulkhead.executionSlots` is greater than zero, the `execute()` will not throw a `BulkheadRejectedError`.
+
+## `Policy.fallback(valueOrFactory)`
+
+Creates a policy that returns the `valueOrFactory` if an executed function fails. As the name suggests, `valueOrFactory` either be a value, or a function we'll call when a failure happens to create a value.
+
+```js
+import { Policy } from 'cockatiel';
+
+const fallback = Policy
+ .handleType(DatabaseError)
+ .fallback(() => getStaleData());
+
+export function handleRequest() {
+  return fallback.execute(() => getInfoFromDatabase());
+}
+```
+
+### `fallback.execute(fn)`
+
+Executes the given function. Any _handled_ error or errorful value will be eaten, and instead the fallback value will be returned.
+
+```js
+const result = await fallback.execute(() => getInfoFromDatabase());
+```
+
+### `fallback.onFallback(callback)`
+
+An [event emitter](#events) that fires when a fallback occurs. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#policyhandleresulttypector-filter). Useful for telemetry. Returns a disposable instance.
+
+```js
+const listener = bulkhead.onReject(() => console.log('bulkhead call was rejected'));
+
+// later:
+listener.dispose();
+```

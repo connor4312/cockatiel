@@ -1,10 +1,11 @@
-import { IBackoff } from './backoff/Backoff';
+import { ExponentialBackoff, IBackoff, IExponentialBackoffOptions } from './backoff/Backoff';
 import { CompositeBackoff, CompositeBias } from './backoff/CompositeBackoff';
 import { ConstantBackoff } from './backoff/ConstantBackoff';
 import { DelegateBackoff, DelegateBackoffFn } from './backoff/DelegateBackoff';
 import { IterableBackoff } from './backoff/IterableBackoff';
+import { EventEmitter } from './common/Event';
 import { execute } from './common/execute';
-import { FailureReason, IBasePolicyOptions } from './Policy';
+import { FailureReason, IBasePolicyOptions, IPolicy } from './Policy';
 
 const delay = (duration: number) => new Promise(resolve => setTimeout(resolve, duration));
 
@@ -33,8 +34,24 @@ export interface IRetryPolicyConfig<R> extends IBasePolicyOptions<R> {
   backoff?: IBackoff<IRetryBackoffContext<R>>;
 }
 
-export class RetryPolicy<R> {
-  constructor(private readonly options: IRetryPolicyConfig<R>) {}
+export class RetryPolicy<R> implements IPolicy<IRetryContext, R> {
+  private onRetryEmitter = new EventEmitter<FailureReason<R> & { delay: number }>();
+  private onGiveUpEmitter = new EventEmitter<FailureReason<R>>();
+
+  /**
+   * Emitter that fires when we retry a call, before any backoff.
+   *
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onRetry = this.onRetryEmitter.addListener;
+
+  /**
+   * Emitter that fires when we retry a call.
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onGiveUp = this.onGiveUpEmitter.addListener;
+
+  constructor(private options: IRetryPolicyConfig<R>) {}
 
   /**
    * Sets the number of retry attempts for the function.
@@ -63,6 +80,13 @@ export class RetryPolicy<R> {
   }
 
   /**
+   * Uses an exponential backoff for retries.
+   */
+  public exponential(options: IExponentialBackoffOptions<IRetryBackoffContext<R>>) {
+    return this.composeBackoff('b', new ExponentialBackoff(options));
+  }
+
+  /**
    * Sets the baackoff to use for retries.
    */
   public backoff(backoff: IBackoff<IRetryBackoffContext<R>>) {
@@ -74,7 +98,9 @@ export class RetryPolicy<R> {
    * @param fn -- Function to run
    * @returns a Promise that resolves or rejects with the function results.
    */
-  public async execute<T extends R>(fn: (context: IRetryContext) => Promise<T> | T): Promise<T> {
+  public async execute<T extends R>(
+    fn: (context: IRetryContext) => PromiseLike<T> | T,
+  ): Promise<T> {
     let backoff: IBackoff<IRetryBackoffContext<R>> | undefined =
       this.options.backoff || new ConstantBackoff(0, 1);
     for (let retries = 0; ; retries++) {
@@ -84,11 +110,17 @@ export class RetryPolicy<R> {
       }
 
       if (backoff) {
-        await delay(backoff.duration());
+        const delayDuration = backoff.duration();
+        const delayPromise = delay(delayDuration);
+        // A little sneaky reordering here lets us use Sinon's fake timers
+        // when we get an emission in our tests.
+        this.onRetryEmitter.emit({ ...result, delay: delayDuration });
+        await delayPromise;
         backoff = backoff.next({ attempt: retries + 1, result });
         continue;
       }
 
+      this.onGiveUpEmitter.emit(result);
       if ('error' in result) {
         throw result.error;
       }
@@ -102,6 +134,7 @@ export class RetryPolicy<R> {
       backoff = new CompositeBackoff(bias, this.options.backoff, backoff);
     }
 
-    return new RetryPolicy({ ...this.options, backoff });
+    this.options = { ...this.options, backoff };
+    return this;
   }
 }

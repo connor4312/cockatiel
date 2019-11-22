@@ -1,9 +1,10 @@
 import { defer } from './common/defer';
 import { EventEmitter } from './common/Event';
 import { BulkheadRejectedError } from './errors/BulkheadRejectedError';
+import { IPolicy } from './Policy';
 
 interface IQueueItem<T> {
-  fn(): Promise<T> | T;
+  fn(context: void): Promise<T> | T;
   resolve(value: T): void;
   reject(error: Error): void;
 }
@@ -11,7 +12,7 @@ interface IQueueItem<T> {
 /**
  * Bulkhead limits concurrent requests made.
  */
-export class Bulkhead {
+export class BulkheadPolicy implements IPolicy<void> {
   private active = 0;
   private queue: Array<IQueueItem<unknown>> = [];
   private onRejectEmitter = new EventEmitter<void>();
@@ -43,7 +44,7 @@ export class Bulkhead {
    * @param fn -- Function to execute
    * @throws a {@link BulkheadRejectedException} if the bulkhead limits are exceeeded
    */
-  public async execute<T>(fn: () => PromiseLike<T> | T): Promise<T> {
+  public async execute<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
     if (this.active < this.capacity) {
       this.active++;
       try {

@@ -1,5 +1,5 @@
 import { expect, use } from 'chai';
-import { SinonStub, stub } from 'sinon';
+import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
 import { Policy } from './Policy';
 import { RetryPolicy } from './RetryPolicy';
 
@@ -32,39 +32,46 @@ describe('RetryPolicy', () => {
   describe('setting backoffs', () => {
     let p: RetryPolicy<unknown>;
     let s: SinonStub;
+    let clock: SinonFakeTimers;
+    let delays: number[];
     beforeEach(() => {
+      clock = useFakeTimers();
       p = Policy.handleAll().retry();
+      delays = [];
+      p.onRetry(({ delay }) => {
+        delays.push(delay);
+        clock.tick(delay);
+      });
       s = stub().throws(new MyErrorA());
     });
 
+    afterEach(() => clock.restore());
+
     it('sets the retry delay', async () => {
-      const start = Date.now();
       await expect(
         p
           .delay(50)
           .attempts(1)
           .execute(s),
       ).to.eventually.be.rejectedWith(MyErrorA);
-      expect(Date.now() - start).to.be.gte(50);
+      expect(delays).to.deep.equal([50]);
       expect(s).to.have.been.calledTwice;
     });
 
     it('sets the retry sequence', async () => {
-      const start = Date.now();
       await expect(p.delay([10, 20, 20]).execute(s)).to.eventually.be.rejectedWith(MyErrorA);
-      expect(Date.now() - start).to.be.gte(50);
+      expect(delays).to.deep.equal([10, 20, 20]);
       expect(s).to.have.callCount(4);
     });
 
     it('sets the retry attempts', async () => {
-      const start = Date.now();
       await expect(
         p
           .delay([10, 20, 20])
           .attempts(1)
           .execute(s),
       ).to.eventually.be.rejectedWith(MyErrorA);
-      expect(Date.now() - start).to.be.gte(10);
+      expect(delays).to.deep.equal([10]);
       expect(s).to.have.been.calledTwice;
     });
   });

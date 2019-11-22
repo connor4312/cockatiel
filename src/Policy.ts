@@ -1,6 +1,7 @@
 import { IBreaker } from './breaker/Breaker';
-import { Bulkhead } from './Bulkhead';
+import { BulkheadPolicy } from './BulkheadPolicy';
 import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
+import { FallbackPolicy } from './FallbackPolicy';
 import { RetryPolicy } from './RetryPolicy';
 import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
@@ -12,27 +13,100 @@ const typeFilter = <T>(cls: Constructor<T>, predicate?: (error: T) => boolean) =
 const always = () => true;
 const never = () => false;
 
-export interface IBasePolicyOptions<ReturnType> {
+export interface IBasePolicyOptions<ReturnConstraint> {
   errorFilter: (error: Error) => boolean;
-  resultFilter: (result: ReturnType) => boolean;
+  resultFilter: (result: ReturnConstraint) => boolean;
 }
 
 /**
  * The reason for a call failure. Either an error, or the a value that was
  * marked as a failure (when using result filtering).
  */
-export type FailureReason<R> = { error: Error } | { value: R };
+export type FailureReason<ReturnType> = { error: Error } | { value: ReturnType };
+
+/**
+ * IPolicy is the type of all policies that Cockatiel provides. It describes
+ * an execute() function which takes a generic argument.
+ */
+export interface IPolicy<ContextType, ReturnConstraint = unknown, AltReturn = never> {
+  execute<T extends ReturnConstraint>(
+    fn: (context: ContextType) => PromiseLike<T> | T,
+  ): Promise<T | AltReturn>;
+}
 
 /**
  * Factory that builds a base set of filters that can be used in circuit
  * breakers, retries, etc.
  */
-export class Policy<ReturnType> {
+export class Policy<ReturnConstraint> {
+  /**
+   * A no-op policy, useful for unit tests and stubs.
+   */
+  public static readonly noop: IPolicy<void> = { execute: async fn => fn(undefined) };
+
+  /**
+   * Wraps the given set of policies into a single policy. For instance, this:
+   *
+   * ```js
+   * retry.execute(() =>
+   *  breaker.execute(() =>
+   *    timeout.execute(({ cancellationToken }) => getData(cancellationToken))))
+   * ```
+   *
+   * Is the equivalent to:
+   *
+   * ```js
+   * Policy
+   *  .wrap(retry, breaker, timeout)
+   *  .execute(({ cancellationToken }) => getData(cancellationToken)));
+   * ```
+   *
+   * The `context` argument passed to the executed function is the merged object
+   * of all previous policies.
+   *
+   * @todo I think there may be a TS bug here preventing correct type-safe
+   * usage without casts: https://github.com/microsoft/TypeScript/issues/35288
+   */
+  // forgive me, for I have sinned
+  public static wrap<T1, U1, A1>(p1: IPolicy<T1, U1, A1>): IPolicy<T1, U1, A1>;
+  public static wrap<T1, U1, A1, T2, U2, A2>(
+    p1: IPolicy<T1, U1, A1>,
+    p2: IPolicy<T2, U2, A2>,
+  ): IPolicy<T1 | T2, U1 & U2, A1 | A2>;
+  public static wrap<T1, U1, A1, T2, U2, A2, T3, U3, A3>(
+    p1: IPolicy<T1, U1, A1>,
+    p2: IPolicy<T2, U2, A2>,
+    p3: IPolicy<T3, U3, A3>,
+  ): IPolicy<T1 | T2 | T3, U1 & U2 & U3, A1 | A2 | A3>;
+  public static wrap<T1, U1, A1, T2, U2, A2, T3, U3, A3, T4, U4, A4>(
+    p1: IPolicy<T1, U1, A1>,
+    p2: IPolicy<T2, U2, A2>,
+    p3: IPolicy<T3, U3, A3>,
+    p4: IPolicy<T4, U4, A4>,
+  ): IPolicy<T1 | T2 | T3 | T4, U1 & U2 & U3 & U4, A1 | A2 | A3 | A4>;
+  public static wrap<T1, U1, A1, T2, U2, A2, T3, U3, A3, T4, U4, A4, T5, U5, A5>(
+    p1: IPolicy<T1, U1, A1>,
+    p2: IPolicy<T2, U2, A2>,
+    p3: IPolicy<T3, U3, A3>,
+    p4: IPolicy<T4, U4, A4>,
+    p5: IPolicy<T5, U5, A5>,
+  ): IPolicy<T1 | T2 | T3 | T4 | T5, U1 & U2 & U3 & U4 & U5, A1 | A2 | A3 | A4 | A5>;
+  public static wrap<T, U, A>(...p: Array<IPolicy<T, U, A>>): IPolicy<T, U, A>;
+  public static wrap<T, U, A>(...p: Array<IPolicy<T, U>>): IPolicy<T, U, A> {
+    return {
+      execute<R extends U>(fn: (context: T) => PromiseLike<R> | R): Promise<R> {
+        const run = (context: any, i: number): R | PromiseLike<R> =>
+          i === p.length ? fn(context) : p[i].execute(next => run({ ...context, ...next }, i + 1));
+        return Promise.resolve(run({}, 0));
+      },
+    };
+  }
+
   /**
    * Creates a bulkhead--a policy that limits the number of concurrent calls.
    */
   public static bulkhead(limit: number, queue: number = 0) {
-    return new Bulkhead(limit, queue);
+    return new BulkheadPolicy(limit, queue);
   }
 
   /**
@@ -83,7 +157,7 @@ export class Policy<ReturnType> {
     return new TimeoutPolicy(duration, strategy);
   }
 
-  protected constructor(private readonly options: Readonly<IBasePolicyOptions<ReturnType>>) {}
+  protected constructor(private readonly options: Readonly<IBasePolicyOptions<ReturnConstraint>>) {}
 
   /**
    * Allows the policy to additionally handles errors of the given type.
@@ -149,15 +223,15 @@ export class Policy<ReturnType> {
    *  .execute(() => getJsonFrom('https://example.com'));
    * ```
    */
-  public orWhenResult(predicate: (r: ReturnType) => boolean) {
+  public orWhenResult(predicate: (r: ReturnConstraint) => boolean) {
     /**
      * Bounty on this. Properly, you should also be able to discriminate the
-     * return types. So if you add a handler like `(result: ReturnType) =>
-     * result is T` where T extends ReturnType, then the policy should then
-     * say that the 'wrapped' function returns `ReturnType - T`. However, I
+     * return types. So if you add a handler like `(result: ReturnConstraint) =>
+     * result is T` where T extends ReturnConstraint, then the policy should then
+     * say that the 'wrapped' function returns `ReturnConstraint - T`. However, I
      * can't seem to figure out how to get this to work...
      */
-    return new Policy<ReturnType>({
+    return new Policy<ReturnConstraint>({
       ...this.options,
       resultFilter: r => this.options.resultFilter(r) || predicate(r),
     });
@@ -179,12 +253,12 @@ export class Policy<ReturnType> {
    *  .execute(() => getJsonFrom('https://example.com'));
    * ```
    */
-  public orResultType<T extends ReturnType>(
+  public orResultType<T extends ReturnConstraint>(
     cls: Constructor<T>,
-    predicate?: (error: ReturnType) => boolean,
+    predicate?: (error: T) => boolean,
   ) {
     const filter = typeFilter(cls, predicate);
-    return new Policy<ReturnType>({
+    return new Policy<ReturnConstraint>({
       ...this.options,
       resultFilter: r => this.options.resultFilter(r) || filter(r),
     });
@@ -229,5 +303,33 @@ export class Policy<ReturnType> {
       breaker,
       halfOpenAfter,
     });
+  }
+
+  /**
+   * Falls back to the given value in the event of an error.
+   *
+   * ```ts
+   * import { Policy } from 'cockatiel';
+   *
+   * const fallback = Policy
+   *  .handleType(DatabaseError)
+   *  .fallback(() => getStaleData());
+   *
+   * export function handleRequest() {
+   *   return fallback.execute(() => getInfoFromDatabase());
+   * }
+   * ```
+   *
+   * @param toValue -- Value to fall back to, or a function that creates the
+   * value to return (any may return a promise)
+   */
+  public fallback<R>(valueOrFactory: (() => Promise<R> | R) | R) {
+    return new FallbackPolicy(
+      this.options,
+      // not technically type-safe, since if they actually want to _return_
+      // a function, that gets lost here. We'll just advice in the docs to
+      // use a higher-order function if necessary.
+      (typeof valueOrFactory === 'function' ? valueOrFactory : () => valueOrFactory) as () => R,
+    );
   }
 }
