@@ -1,12 +1,19 @@
 import { expect } from 'chai';
 import { stub } from 'sinon';
 import { ConsecutiveBreaker } from './breaker/Breaker';
+import { CancellationToken } from './CancellationToken';
 import { BrokenCircuitError } from './errors/Errors';
 import { Policy } from './Policy';
+import { TimeoutStrategy } from './TimeoutPolicy';
 
 class MyError1 extends Error {}
 class MyError2 extends Error {}
 class MyError3 extends Error {}
+
+// tslint:disable-next-line: variable-name
+const assertNever = (_value: never) => {
+  throw new Error('unreachable');
+};
 
 describe('Policy', () => {
   it('wraps', async () => {
@@ -21,6 +28,33 @@ describe('Policy', () => {
     await expect(policy.execute(stub().throws(new MyError1()))).to.be.rejectedWith(
       BrokenCircuitError,
     );
+  });
+
+  it('wraps and keeps correct types', async () => {
+    const policy = Policy.wrap(
+      Policy.handleAll().retry(),
+      Policy.handleAll().circuitBreaker(100, new ConsecutiveBreaker(2)),
+      Policy.handleAll().fallback('foo'),
+      Policy.timeout(1000, TimeoutStrategy.Aggressive),
+      Policy.noop,
+    );
+
+    const result = await policy.execute(context => {
+      expect(context.cancellation).to.be.an.instanceOf(CancellationToken);
+      expect(context.attempt).to.equal(0);
+      return 1234;
+    });
+
+    switch (typeof result) {
+      case 'string':
+        result.toUpperCase();
+        break;
+      case 'number':
+        Math.pow(result, 2);
+        break;
+      default:
+        assertNever(result);
+    }
   });
 
   it('applies error filters', async () => {

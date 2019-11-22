@@ -18,7 +18,7 @@ This table lists the API which Cockatiel provides. I recommend reading the [Poll
   - [Policy.handleWhen(filter)](#policyhandlewhen)
   - [Policy.handleResultType(ctor[, filter])](#policyhandleresulttypector-filter)
   - [Policy.handleResultWhen(filter)](#policyhandleresultwhenfilter)
-  - [Policy.wrap(policies)](#policywrappolicies)
+  - [Policy.wrap(...policies)](#policywrappolicies)
   - [Policy.noop](#policynoop)
 - [x] [Backoffs](#backoffs)
   - [ConstantBackoff](#constantConstantBackoffbackoff)

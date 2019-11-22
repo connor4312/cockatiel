@@ -12,7 +12,7 @@ class MyException extends Error {}
 const delay = promisify(setTimeout);
 
 describe('CircuitBreakerPolicy', () => {
-  let p: CircuitBreakerPolicy<unknown>;
+  let p: CircuitBreakerPolicy;
   let clock: SinonFakeTimers;
   let onBreak: SinonStub;
   let onReset: SinonStub;

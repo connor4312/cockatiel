@@ -30,7 +30,7 @@ describe('RetryPolicy', () => {
   });
 
   describe('setting backoffs', () => {
-    let p: RetryPolicy<unknown>;
+    let p: RetryPolicy;
     let s: SinonStub;
     let clock: SinonFakeTimers;
     let delays: number[];
@@ -117,7 +117,7 @@ describe('RetryPolicy', () => {
       .returns(2);
 
     expect(
-      await Policy.handleWhenResult<number>(r => r < 2)
+      await Policy.handleWhenResult(r => typeof r === 'number' && r < 2)
         .retry()
         .attempts(5)
         .execute(s),
@@ -130,7 +130,7 @@ describe('RetryPolicy', () => {
     const s = stub().returns(1);
 
     expect(
-      await Policy.handleWhenResult<number>(r => r < 2)
+      await Policy.handleWhenResult(r => typeof r === 'number' && r < 2)
         .retry()
         .attempts(5)
         .execute(s),

@@ -30,13 +30,13 @@ export interface IRetryBackoffContext<R> extends IRetryContext {
   result: FailureReason<R>;
 }
 
-export interface IRetryPolicyConfig<R> extends IBasePolicyOptions<R> {
-  backoff?: IBackoff<IRetryBackoffContext<R>>;
+export interface IRetryPolicyConfig extends IBasePolicyOptions {
+  backoff?: IBackoff<IRetryBackoffContext<unknown>>;
 }
 
-export class RetryPolicy<R> implements IPolicy<IRetryContext, R> {
-  private onRetryEmitter = new EventEmitter<FailureReason<R> & { delay: number }>();
-  private onGiveUpEmitter = new EventEmitter<FailureReason<R>>();
+export class RetryPolicy implements IPolicy<IRetryContext> {
+  private onRetryEmitter = new EventEmitter<FailureReason<unknown> & { delay: number }>();
+  private onGiveUpEmitter = new EventEmitter<FailureReason<unknown>>();
 
   /**
    * Emitter that fires when we retry a call, before any backoff.
@@ -51,7 +51,7 @@ export class RetryPolicy<R> implements IPolicy<IRetryContext, R> {
   // tslint:disable-next-line: member-ordering
   public readonly onGiveUp = this.onGiveUpEmitter.addListener;
 
-  constructor(private options: IRetryPolicyConfig<R>) {}
+  constructor(private options: IRetryPolicyConfig) {}
 
   /**
    * Sets the number of retry attempts for the function.
@@ -75,21 +75,21 @@ export class RetryPolicy<R> implements IPolicy<IRetryContext, R> {
   /**
    * Sets the baackoff to use for retries.
    */
-  public delegate<S>(backoff: DelegateBackoffFn<IRetryBackoffContext<R>, S>) {
+  public delegate<S>(backoff: DelegateBackoffFn<IRetryBackoffContext<unknown>, S>) {
     return this.composeBackoff('b', new DelegateBackoff(backoff));
   }
 
   /**
    * Uses an exponential backoff for retries.
    */
-  public exponential(options: IExponentialBackoffOptions<IRetryBackoffContext<R>>) {
+  public exponential(options: IExponentialBackoffOptions<IRetryBackoffContext<unknown>>) {
     return this.composeBackoff('b', new ExponentialBackoff(options));
   }
 
   /**
    * Sets the baackoff to use for retries.
    */
-  public backoff(backoff: IBackoff<IRetryBackoffContext<R>>) {
+  public backoff(backoff: IBackoff<IRetryBackoffContext<unknown>>) {
     return this.composeBackoff('b', backoff);
   }
 
@@ -98,10 +98,8 @@ export class RetryPolicy<R> implements IPolicy<IRetryContext, R> {
    * @param fn -- Function to run
    * @returns a Promise that resolves or rejects with the function results.
    */
-  public async execute<T extends R>(
-    fn: (context: IRetryContext) => PromiseLike<T> | T,
-  ): Promise<T> {
-    let backoff: IBackoff<IRetryBackoffContext<R>> | undefined =
+  public async execute<T>(fn: (context: IRetryContext) => PromiseLike<T> | T): Promise<T> {
+    let backoff: IBackoff<IRetryBackoffContext<unknown>> | undefined =
       this.options.backoff || new ConstantBackoff(0, 1);
     for (let retries = 0; ; retries++) {
       const result = await execute(this.options, fn, { attempt: retries });
@@ -129,7 +127,7 @@ export class RetryPolicy<R> implements IPolicy<IRetryContext, R> {
     }
   }
 
-  private composeBackoff(bias: CompositeBias, backoff: IBackoff<IRetryBackoffContext<R>>) {
+  private composeBackoff(bias: CompositeBias, backoff: IBackoff<IRetryBackoffContext<unknown>>) {
     if (this.options.backoff) {
       backoff = new CompositeBackoff(bias, this.options.backoff, backoff);
     }

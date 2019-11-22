@@ -2,8 +2,8 @@ import { IBreaker } from './breaker/Breaker';
 import { BulkheadPolicy } from './BulkheadPolicy';
 import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
 import { FallbackPolicy } from './FallbackPolicy';
-import { RetryPolicy } from './RetryPolicy';
-import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
+import { IRetryContext, RetryPolicy } from './RetryPolicy';
+import { ICancellationContext, TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
 type Constructor<T> = new (...args: any) => T;
 
@@ -13,9 +13,9 @@ const typeFilter = <T>(cls: Constructor<T>, predicate?: (error: T) => boolean) =
 const always = () => true;
 const never = () => false;
 
-export interface IBasePolicyOptions<ReturnConstraint> {
+export interface IBasePolicyOptions {
   errorFilter: (error: Error) => boolean;
-  resultFilter: (result: ReturnConstraint) => boolean;
+  resultFilter: (result: unknown) => boolean;
 }
 
 /**
@@ -28,21 +28,37 @@ export type FailureReason<ReturnType> = { error: Error } | { value: ReturnType }
  * IPolicy is the type of all policies that Cockatiel provides. It describes
  * an execute() function which takes a generic argument.
  */
-export interface IPolicy<ContextType, ReturnConstraint = unknown, AltReturn = never> {
-  execute<T extends ReturnConstraint>(
-    fn: (context: ContextType) => PromiseLike<T> | T,
-  ): Promise<T | AltReturn>;
+export interface IPolicy<ContextType, AltReturn = never> {
+  execute<T>(fn: (context: ContextType) => PromiseLike<T> | T): Promise<T | AltReturn>;
 }
+
+type PolicyType<T> = T extends RetryPolicy
+  ? IPolicy<IRetryContext, never>
+  : T extends TimeoutPolicy
+  ? IPolicy<ICancellationContext, never>
+  : T extends FallbackPolicy<infer F>
+  ? IPolicy<void, F>
+  : T extends CircuitBreakerPolicy
+  ? IPolicy<void, never>
+  : T extends IPolicy<infer ContextType, infer ReturnType>
+  ? IPolicy<ContextType, ReturnType>
+  : never;
+
+type MergePolicies<A, B> = A extends IPolicy<infer A1, infer A2>
+  ? B extends IPolicy<infer B1, infer B2>
+    ? IPolicy<A1 & B1, A2 | B2>
+    : never
+  : never;
 
 /**
  * Factory that builds a base set of filters that can be used in circuit
  * breakers, retries, etc.
  */
-export class Policy<ReturnConstraint> {
+export class Policy {
   /**
    * A no-op policy, useful for unit tests and stubs.
    */
-  public static readonly noop: IPolicy<void> = { execute: async fn => fn(undefined) };
+  public static readonly noop: IPolicy<any> = { execute: async fn => fn(undefined) };
 
   /**
    * Wraps the given set of policies into a single policy. For instance, this:
@@ -64,38 +80,60 @@ export class Policy<ReturnConstraint> {
    * The `context` argument passed to the executed function is the merged object
    * of all previous policies.
    *
-   * @todo I think there may be a TS bug here preventing correct type-safe
-   * usage without casts: https://github.com/microsoft/TypeScript/issues/35288
    */
-  // forgive me, for I have sinned
-  public static wrap<T1, U1, A1>(p1: IPolicy<T1, U1, A1>): IPolicy<T1, U1, A1>;
-  public static wrap<T1, U1, A1, T2, U2, A2>(
-    p1: IPolicy<T1, U1, A1>,
-    p2: IPolicy<T2, U2, A2>,
-  ): IPolicy<T1 | T2, U1 & U2, A1 | A2>;
-  public static wrap<T1, U1, A1, T2, U2, A2, T3, U3, A3>(
-    p1: IPolicy<T1, U1, A1>,
-    p2: IPolicy<T2, U2, A2>,
-    p3: IPolicy<T3, U3, A3>,
-  ): IPolicy<T1 | T2 | T3, U1 & U2 & U3, A1 | A2 | A3>;
-  public static wrap<T1, U1, A1, T2, U2, A2, T3, U3, A3, T4, U4, A4>(
-    p1: IPolicy<T1, U1, A1>,
-    p2: IPolicy<T2, U2, A2>,
-    p3: IPolicy<T3, U3, A3>,
-    p4: IPolicy<T4, U4, A4>,
-  ): IPolicy<T1 | T2 | T3 | T4, U1 & U2 & U3 & U4, A1 | A2 | A3 | A4>;
-  public static wrap<T1, U1, A1, T2, U2, A2, T3, U3, A3, T4, U4, A4, T5, U5, A5>(
-    p1: IPolicy<T1, U1, A1>,
-    p2: IPolicy<T2, U2, A2>,
-    p3: IPolicy<T3, U3, A3>,
-    p4: IPolicy<T4, U4, A4>,
-    p5: IPolicy<T5, U5, A5>,
-  ): IPolicy<T1 | T2 | T3 | T4 | T5, U1 & U2 & U3 & U4 & U5, A1 | A2 | A3 | A4 | A5>;
-  public static wrap<T, U, A>(...p: Array<IPolicy<T, U, A>>): IPolicy<T, U, A>;
-  public static wrap<T, U, A>(...p: Array<IPolicy<T, U>>): IPolicy<T, U, A> {
+  // The types here a certain unattrative. Ideally we could do
+  // `wrap<A, B>(p: IPolicy<A, B>): IPolicy<A, B>`, but TS doesn't narrow the
+  // types well in that scenario (unless p is explicitly typed as an IPolicy
+  // and not some implementation) and returns `IPolicy<void, unknown>` and
+  // the like. This is the best solution I've found for it.
+  public static wrap<A extends IPolicy<unknown, unknown>>(p1: A): PolicyType<A>;
+  public static wrap<A extends IPolicy<unknown, unknown>, B extends IPolicy<unknown, unknown>>(
+    p1: A,
+    p2: B,
+  ): MergePolicies<PolicyType<A>, PolicyType<B>>;
+  public static wrap<
+    A extends IPolicy<unknown, unknown>,
+    B extends IPolicy<unknown, unknown>,
+    C extends IPolicy<unknown, unknown>
+  >(p1: A, p2: B, p3: C): MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>;
+  public static wrap<
+    A extends IPolicy<unknown, unknown>,
+    B extends IPolicy<unknown, unknown>,
+    C extends IPolicy<unknown, unknown>,
+    D extends IPolicy<unknown, unknown>
+  >(
+    p1: A,
+    p2: B,
+    p3: C,
+    p4: D,
+  ): MergePolicies<
+    PolicyType<D>,
+    MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
+  >;
+  public static wrap<
+    A extends IPolicy<unknown, unknown>,
+    B extends IPolicy<unknown, unknown>,
+    C extends IPolicy<unknown, unknown>,
+    D extends IPolicy<unknown, unknown>,
+    E extends IPolicy<unknown, unknown>
+  >(
+    p1: A,
+    p2: B,
+    p3: C,
+    p4: D,
+    p5: E,
+  ): MergePolicies<
+    PolicyType<E>,
+    MergePolicies<
+      PolicyType<D>,
+      MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
+    >
+  >;
+  public static wrap<C, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A>;
+  public static wrap<C, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A> {
     return {
-      execute<R extends U>(fn: (context: T) => PromiseLike<R> | R): Promise<R> {
-        const run = (context: any, i: number): R | PromiseLike<R> =>
+      execute<T>(fn: (context: C) => PromiseLike<T> | T): Promise<T | A> {
+        const run = (context: any, i: number): PromiseLike<T | A> | T | A =>
           i === p.length ? fn(context) : p[i].execute(next => run({ ...context, ...next }, i + 1));
         return Promise.resolve(run({}, 0));
       },
@@ -139,7 +177,7 @@ export class Policy<ReturnConstraint> {
   /**
    * See {@link Policy.orWhenResult} for usage.
    */
-  public static handleWhenResult<T>(predicate: (error: T) => boolean) {
+  public static handleWhenResult(predicate: (error: unknown) => boolean) {
     return new Policy({ errorFilter: never, resultFilter: predicate });
   }
 
@@ -157,7 +195,7 @@ export class Policy<ReturnConstraint> {
     return new TimeoutPolicy(duration, strategy);
   }
 
-  protected constructor(private readonly options: Readonly<IBasePolicyOptions<ReturnConstraint>>) {}
+  protected constructor(private readonly options: Readonly<IBasePolicyOptions>) {}
 
   /**
    * Allows the policy to additionally handles errors of the given type.
@@ -223,15 +261,8 @@ export class Policy<ReturnConstraint> {
    *  .execute(() => getJsonFrom('https://example.com'));
    * ```
    */
-  public orWhenResult(predicate: (r: ReturnConstraint) => boolean) {
-    /**
-     * Bounty on this. Properly, you should also be able to discriminate the
-     * return types. So if you add a handler like `(result: ReturnConstraint) =>
-     * result is T` where T extends ReturnConstraint, then the policy should then
-     * say that the 'wrapped' function returns `ReturnConstraint - T`. However, I
-     * can't seem to figure out how to get this to work...
-     */
-    return new Policy<ReturnConstraint>({
+  public orWhenResult(predicate: (r: unknown) => boolean) {
+    return new Policy({
       ...this.options,
       resultFilter: r => this.options.resultFilter(r) || predicate(r),
     });
@@ -253,12 +284,9 @@ export class Policy<ReturnConstraint> {
    *  .execute(() => getJsonFrom('https://example.com'));
    * ```
    */
-  public orResultType<T extends ReturnConstraint>(
-    cls: Constructor<T>,
-    predicate?: (error: T) => boolean,
-  ) {
+  public orResultType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
     const filter = typeFilter(cls, predicate);
-    return new Policy<ReturnConstraint>({
+    return new Policy({
       ...this.options,
       resultFilter: r => this.options.resultFilter(r) || filter(r),
     });

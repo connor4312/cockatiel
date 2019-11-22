@@ -29,7 +29,7 @@ export enum CircuitState {
   Isolated,
 }
 
-export interface ICircuitBreakerOptions<R> extends IBasePolicyOptions<R> {
+export interface ICircuitBreakerOptions extends IBasePolicyOptions {
   breaker: IBreaker;
   halfOpenAfter: number;
 }
@@ -40,10 +40,10 @@ type InnerState =
   | { value: CircuitState.Open; openedAt: number }
   | { value: CircuitState.HalfOpen; test: Promise<any> };
 
-export class CircuitBreakerPolicy<R> implements IPolicy<void, R> {
-  private readonly breakEmitter = new EventEmitter<FailureReason<R> | { isolated: true }>();
+export class CircuitBreakerPolicy implements IPolicy<void> {
+  private readonly breakEmitter = new EventEmitter<FailureReason<unknown> | { isolated: true }>();
   private readonly resetEmitter = new EventEmitter<void>();
-  private innerLastFailure?: FailureReason<R>;
+  private innerLastFailure?: FailureReason<unknown>;
   private innerState: InnerState = { value: CircuitState.Closed };
 
   /**
@@ -72,7 +72,7 @@ export class CircuitBreakerPolicy<R> implements IPolicy<void, R> {
     return this.innerLastFailure;
   }
 
-  constructor(private readonly options: ICircuitBreakerOptions<R>) {}
+  constructor(private readonly options: ICircuitBreakerOptions) {}
 
   /**
    * Manually holds open the circuit breaker.
@@ -110,7 +110,7 @@ export class CircuitBreakerPolicy<R> implements IPolicy<void, R> {
    * open via {@link CircuitBreakerPolicy.isolate}
    * @returns a Promise that resolves or rejects with the function results.
    */
-  public async execute<T extends R>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
+  public async execute<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
     const state = this.innerState;
     switch (state.value) {
       case CircuitState.Closed:
@@ -146,7 +146,7 @@ export class CircuitBreakerPolicy<R> implements IPolicy<void, R> {
     }
   }
 
-  private async halfOpen<T extends R>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
+  private async halfOpen<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
     try {
       const result = await execute(this.options, fn);
       if ('success' in result) {
@@ -167,7 +167,7 @@ export class CircuitBreakerPolicy<R> implements IPolicy<void, R> {
     }
   }
 
-  private open(reason: FailureReason<R>) {
+  private open(reason: FailureReason<unknown>) {
     if (this.state === CircuitState.Isolated || this.state === CircuitState.Open) {
       return;
     }
