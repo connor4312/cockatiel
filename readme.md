@@ -15,13 +15,13 @@ This table lists the API which Cockatiel provides. I recommend reading the [Poll
 - [x] Base [Policy](#policy)
   - [Policy.handleAll()](#policyhandleAll)
   - [Policy.handleType(ctor[, filter])](#policyhandletypector-filter)
-  - [Policy.handleWhen(filter)](#policyhandlewhen)
+  - [Policy.handleWhen(filter)](#policyhandlewhenfilter)
   - [Policy.handleResultType(ctor[, filter])](#policyhandleresulttypector-filter)
   - [Policy.handleResultWhen(filter)](#policyhandleresultwhenfilter)
   - [Policy.wrap(...policies)](#policywrappolicies)
   - [Policy.noop](#policynoop)
 - [x] [Backoffs](#backoffs)
-  - [ConstantBackoff](#constantConstantBackoffbackoff)
+  - [ConstantBackoff](#ConstantBackoff)
   - [ExponentialBackoff](#ExponentialBackoff)
   - [IterableBackoff](#IterableBackoff)
   - [DelegateBackoff](#DelegateBackoff)
@@ -31,19 +31,20 @@ This table lists the API which Cockatiel provides. I recommend reading the [Poll
   - [cancellationTokenSource.token](#cancellationtokensourcetoken)
   - [cancellationTokenSource.cancel()](#cancellationtokensourcecancel)
   - [cancellationToken.isCancellationRequested](#cancellationtokeniscancellationrequested)
-  - [cancellationToken.onCancellationRequested(listener)](#cancellationtokenoncancellationrequestedlistener)
+  - [cancellationToken.onCancellationRequested(callback)](#cancellationtokenoncancellationrequestedcallback)
   - [cancellationToken.cancelled()](#cancellationtokencancelledcancellationToken)
 - [x] [Events](#events)
   - [Event.toPromise(event[, cancellationToken])](#eventtopromiseevent-cancellationtoken)
-  - [Event.once(event, listener)](#eventonceeventlistener)
+  - [Event.once(event, callback)](#eventonceevent-callback)
 - [x] [Policy.retry](#policyretry)
   - [retry.execute(fn)](#retryexecutefn)
   - [retry.attempts(count)](#retryattemptscount)
   - [retry.delay(amount)](#retrydelayamount)
+  - [retry.exponential(options)](#retryexponentialoptions)
   - [retry.delegate(fn)](#retrydelegatefn)
   - [retry.backoff(policy)](#retrybackoffpolicy)
-  - [retry.onRetry(listener)](#retryonretrylistener)
-  - [retry.onGiveUp(listener)](#retryongiveuplistener)
+  - [retry.onRetry(callback)](#retryonretrycallback)
+  - [retry.onGiveUp(callback)](#retryongiveupcallback)
 - [x] [Policy.circuitBreaker](#policycircuitbreakeropenafter-breaker)
   - [ConsecutiveBreaker](#ConsecutiveBreaker)
   - [SamplingBreaker](#SamplingBreaker)
@@ -54,7 +55,7 @@ This table lists the API which Cockatiel provides. I recommend reading the [Poll
   - [breaker.isolate()](#breakerisolate)
 - [x] [Policy.timeout](#policytimeoutduration-strategy)
   - [timeout.execute(fn)](#timeoutexecutefn)
-  - [timeout.onTimeout(listener)](#timeoutontimeoutlistener)
+  - [timeout.onTimeout(callback)](#timeoutontimeoutcallback)
 - [x] [Policy.bulkhead](#policybulkheadlimit-queue)
   - [bulkhead.execute(fn)](#bulkheadexecutefn)
   - [bulkhead.onReject(callback)](#bulkheadonrejectcallback)
@@ -144,7 +145,7 @@ const result = await Policy
   .execute(({ cancellation }) => getData(cancellation)));
 ```
 
-The `context` argument passed to the executed function is the merged object of all previous policies. So for instance, in the above example you'll get the cancellation token from the [TimeoutPolicy](#policytimeout) as well as the attempt number from the [RetryPolicy](#policyretry):
+The `context` argument passed to the executed function is the merged object of all previous policies. So for instance, in the above example you'll get the cancellation token from the [TimeoutPolicy](#policytimeoutduration-strategy) as well as the attempt number from the [RetryPolicy](#policyretry):
 
 ```ts
 Policy.wrap(retry, breaker, timeout).execute(context => {
@@ -200,7 +201,7 @@ const limitedBackoff = new ConstantBackoff(50, 3);
 
 ### ExponentialBackoff
 
-> Tip: exponential backoffs and [circuit breakers](#policycircuitbreaker) are great friends!
+> Tip: exponential backoffs and [circuit breakers](#policycircuitbreakeropenafter-breaker) are great friends!
 
 The crowd favorite. Takes in an options object, which can have any of these properties:
 
@@ -313,7 +314,7 @@ const backoff = new CompositeBackoff(
 
 ## `CancellationToken`
 
-Cancellation tokens are prominent in C# land to allow for cooperative cancellation. They're used here for [timeouts](#policytimeoutdurationstrategy).
+Cancellation tokens are prominent in C# land to allow for cooperative cancellation. They're used here for [timeouts](#policytimeoutduration-strategy).
 
 The `CancellationTokenSource` is the 'factory' that creates `CancellationTokens`, and can be used to cancel and operation. Once cancellation is requested, an event will be emitted on all linked tokens. You can nest cancellation tokens and sources, cancellation cascades down.
 
@@ -374,7 +375,7 @@ if (token.isCancellationRequested) {
 }
 ```
 
-### `cancellationToken.onCancellationRequested(listener)`
+### `cancellationToken.onCancellationRequested(callback)`
 
 An [event emitter](#events) that fires when a cancellation is requested. Fires immediately if cancellation has already been requested. Returns a disposable instance.
 
@@ -426,7 +427,7 @@ async function waitForFallback(policy) {
 }
 ```
 
-### `Event.once(callback)`
+### `Event.once(event, callback)`
 
 Waits for the event to fire once, and then automatically unregisters the listener. This method itself returns an `IDisposable`, which you could use to unregister the listener if needed.
 
@@ -505,6 +506,18 @@ Policy
   // ...
 ```
 
+### `retry.exponential(options)`
+
+Uses an exponential backoff for retries. See [ExponentialBackoff](#exponentialbackoff) for more details around the available options.
+
+```ts
+Policy
+  .handleAll()
+  .retry()
+  .exponential({ maxDelay: 10 * 1000, maxAttempts: 5 )
+  // ...
+```
+
 ### `retry.delegate(fn)`
 
 Creates a delegate backoff. See [DelegateBackoff](#DelegateBackoff) for more details here.
@@ -529,7 +542,7 @@ Policy
   // ...
 ```
 
-### `retry.onRetry(listener)`
+### `retry.onRetry(callback)`
 
 An [event emitter](#events) that fires when we retry a call, before any backoff. It's invoked with an object that includes:
 
@@ -545,7 +558,7 @@ const listener = retry.onRetry(reason => console.log('retrying a function call:'
 listener.dispose();
 ```
 
-### `retry.onGiveUp(listener)`
+### `retry.onGiveUp(callback)`
 
 An [event emitter](#events) that fires when we're no longer retrying a call and are giving up. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#policyhandleresulttypector-filter). Useful for telemetry. Returns a dispable instance.
 
@@ -713,7 +726,7 @@ Executes the given function as configured in the policy. A [CancellationToken](#
 await timeout.execute(cancellationToken => getInfoFromDatabase(cancellationToken))
 ```
 
-### `timeout.onTimeout(listener)`
+### `timeout.onTimeout(callback)`
 
 An [event emitter](#events) that fires when a timeout is reached. Useful for telemetry. Returns a disposable instance.
 

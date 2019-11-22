@@ -7,11 +7,12 @@
   "sideEffects": false,
   "scripts": {
     "prepublishOnly": "npm run compile",
-    "test": "rimraf dist && tsc && npm run test:unit && npm run test:lint && npm run test:fmt",
+    "test": "rimraf dist && tsc && npm run test:unit && npm run test:lint && npm run test:fmt && npm run test:md",
     "test:cover": "rimraf dist && tsc && nyc npm run test:unit",
     "test:unit": "mocha --opts mocha.opts",
     "test:lint": "tslint -p tsconfig.json",
     "test:fmt": "prettier --list-different \"src/**/*.ts\"",
+    "test:md": "remark -u validate-links -f readme.md",
     "fmt": "prettier --write \"src/**/*.ts\" && npm run test:lint -- --fix",
     "compile": "rimraf dist && tsc && tsc -p tsconfig.esm.json",
     "watch": "rimraf dist && tsc --watch"
@@ -70,6 +71,8 @@
     "mocha": "^6.2.2",
     "nyc": "^14.1.1",
     "prettier": "^1.19.1",
+    "remark-cli": "^7.0.1",
+    "remark-validate-links": "^9.0.1",
     "rimraf": "^3.0.0",
     "sinon": "^7.5.0",
     "sinon-chai": "^3.3.0",
