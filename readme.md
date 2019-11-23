@@ -10,6 +10,38 @@ Cockatiel is resilience and transient-fault-handling library that allows develop
 npm install --save cockatiel
 ```
 
+Then go forth with confidence:
+
+```js
+// alternatively: const { Policy, ConsecutiveBreaker } = require('cockatiel');
+import { Policy, ConsecutiveBreaker } from 'cockatiel';
+import { database } from './my-db';
+
+// Create a retry policy that'll try whatever function we execute 3
+// times with an exponential backoff.
+const retry = Policy
+  .handleAll()
+  .retry()
+  .attempts(3)
+  .exponential();
+
+// Create a circuit breaker that'll stop calling the executed function for 10
+// seconds if it fails 5 times in a row. This can give time for e.g. a database
+// to recover without getting tons of traffic.
+const circuitBreaker = Policy
+  .handleAll()
+  .circuitBreaker(10 * 1000, new ConsecutiveBreaker(5))
+
+// Combine these! Create a policy that retries 3 times, calling through the circuit breaker
+const retryWithBreaker = Policy.wrap(retry, circuitBreaker);
+
+exports.handleRequest = async (req, res) => {
+  // Call your database safely!
+  const data = await retryWithBreaker.execute(() => database.getInfo(req.params.id))
+  return res.json(data);
+};
+```
+
 ## Contents
 
 This table lists the API which Cockatiel provides. I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) for more information for details and mechanics around the patterns we provide.
