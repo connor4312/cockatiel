@@ -281,7 +281,7 @@ Example:
 const defaultBackoff = new ExponentialBackoff();
 
 // Have some lower limits:
-const limitedBackoff = new ExponentialBackoff({ maxDelay: 1000, initialDelay: 4 );
+const limitedBackoff = new ExponentialBackoff({ maxDelay: 1000, initialDelay: 4 });
 ```
 
 ### IterableBackoff
