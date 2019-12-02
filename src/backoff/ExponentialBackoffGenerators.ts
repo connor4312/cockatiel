@@ -54,8 +54,11 @@ const rpScalingFactor = 1 / 1.4;
  */
 export const decorrelatedJitterGenerator: GeneratorFn<[number, number]> = (state, options) => {
   const [attempt, prev] = state || [0, 0];
-  const t = attempt * Math.random();
+  const t = attempt + Math.random();
   const next = Math.pow(options.exponent, t) * Math.tanh(Math.sqrt(pFactor * t));
   const formulaIntrinsicValue = Math.max(0, next - prev);
-  return [formulaIntrinsicValue * rpScalingFactor * options.initialDelay, [attempt + 1, next]];
+  return [
+    Math.min(formulaIntrinsicValue * rpScalingFactor * options.initialDelay, options.maxDelay),
+    [attempt + 1, next],
+  ];
 };

@@ -30,7 +30,7 @@ describe('ExponentialBackoff Generators', () => {
         for (let k = 1; k < 100; k++) {
           const [delay, nextState] = generator(state, options);
           expect(delay).to.be.gte(0);
-          expect(delay).to.be.lte(options.initialDelay * 2 ** k);
+          expect(delay).to.be.lte(Math.min(30000, options.initialDelay * 2 ** k));
           state = nextState;
         }
       }
