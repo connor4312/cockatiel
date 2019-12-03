@@ -18,7 +18,7 @@ import { Policy, ConsecutiveBreaker } from 'cockatiel';
 import { database } from './my-db';
 
 // Create a retry policy that'll try whatever function we execute 3
-// times with an exponential backoff.
+// times with a randomized exponential backoff.
 const retry = Policy.handleAll()
   .retry()
   .attempts(3)
@@ -236,7 +236,7 @@ const limitedBackoff = new ConstantBackoff(50, 3);
 
 > Tip: exponential backoffs and [circuit breakers](#policycircuitbreakeropenafter-breaker) are great friends!
 
-The crowd favorite. Takes in an options object, which can have any of these properties:
+The crowd favorite. By default, it uses a decorrelated jitter algorithm, which is a good default for most applications. Takes in an options object, which can have any of these properties:
 
 ```ts
 export interface IExponentialBackoffOptions<S> {
@@ -276,12 +276,24 @@ export interface IExponentialBackoffOptions<S> {
 Example:
 
 ```ts
-// Use all the defaults:
+import { ExponentialBackoff, noJitterGenerator } from 'cockatiel';
+
+// Use all the defaults. Decorrelated jitter, 30 seconds max delay, infinite attempts:
 const defaultBackoff = new ExponentialBackoff();
 
 // Have some lower limits:
 const limitedBackoff = new ExponentialBackoff({ maxDelay: 1000, initialDelay: 4 });
+
+// Use a backoff without jitter
+const limitedBackoff = new ExponentialBackoff({ generator: noJitterGenerator });
 ```
+
+Several jitter strategies are provided. This [AWS blog post](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) has more information around the strategies and why you might want to use them. The available jitter generators exported from `cockatiel` are:
+
+- `decorrelatedJitterGenerator` -- The default implementation, the one that [Polly.Contrib.WaitAndRetry uses](https://github.com/Polly-Contrib/Polly.Contrib.WaitAndRetry/tree/79224cff9670b159418f955af4d0a9ebc2a09778#new-jitter-recommendation)
+- `noJitterGenerator` -- Does not add any jitter
+- `fullJitterGenerator` -- Jitters between `[0, interval)`
+- `halfJitterGenerator` -- Jitters between `[interval / 2, interval)`
 
 ### IterableBackoff
 
@@ -356,8 +368,10 @@ const source1 = new CancellationTokenSource();
 const token1 = source1.token;
 
 // You can listen to an event, await a promise, or just check a synchronous value...
-token1.onCancellationRequested(() => console.log('source1 cancelled');
-token1.cancellation().then(() => { /* ... */ });
+token1.onCancellationRequested(() => console.log('source1 cancelled'));
+token1.cancellation().then(() => {
+  /* ... */
+});
 
 if (token1.isCancellationRequested) {
   console.log('source1 already cancelled!');
@@ -365,7 +379,7 @@ if (token1.isCancellationRequested) {
 
 // You can the nest new cancellation token sources:
 const source2 = new CancellationTokenSource(token1);
-source2.onCancellationRequested(() => console.log('source2 cancelled');
+source2.onCancellationRequested(() => console.log('source2 cancelled'));
 
 // And, finally, cancel tokens, which will cascade down to all children:
 source1.cancel();
