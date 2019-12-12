@@ -1,5 +1,6 @@
 import { expect, use } from 'chai';
 import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
+import { noJitterGenerator } from './backoff/Backoff';
 import { Policy } from './Policy';
 import { RetryPolicy } from './RetryPolicy';
 
@@ -124,6 +125,19 @@ describe('RetryPolicy', () => {
     ).to.equal(2);
 
     expect(s).to.have.been.calledTwice;
+  });
+
+  it('permits specifying exponential backoffs', async () => {
+    const s = stub().returns(1);
+
+    expect(
+      await Policy.handleWhenResult(r => typeof r === 'number')
+        .retry()
+        .exponential({ generator: noJitterGenerator, maxAttempts: 2 })
+        .execute(s),
+    ).to.equal(1);
+
+    expect(s).to.have.callCount(3);
   });
 
   it('bubbles returns when retry attempts exceeded', async () => {

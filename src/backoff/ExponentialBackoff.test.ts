@@ -10,6 +10,6 @@ describe('ExponentialBackoff', () => {
 
   it('sets max retries correctly', () => {
     const b = new ExponentialBackoff({ generator: noJitterGenerator, maxAttempts: 4 });
-    expectDurations(b, [0, 128, 256, 512, 1024, undefined]);
+    expectDurations(b, [0, 128, 256, 512, undefined]);
   });
 });

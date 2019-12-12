@@ -66,7 +66,7 @@ export class ExponentialBackoff<S> implements IBackoff<void> {
   }
 
   public next() {
-    if (this.attempt >= this.options.maxAttempts) {
+    if (this.attempt >= this.options.maxAttempts - 1) {
       return undefined;
     }
 
