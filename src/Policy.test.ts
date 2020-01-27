@@ -4,6 +4,7 @@ import { ConsecutiveBreaker } from './breaker/Breaker';
 import { CancellationToken } from './CancellationToken';
 import { BrokenCircuitError } from './errors/Errors';
 import { Policy } from './Policy';
+import { IRetryContext } from './RetryPolicy';
 import { TimeoutStrategy } from './TimeoutPolicy';
 
 class MyError1 extends Error {}
@@ -107,5 +108,28 @@ describe('Policy', () => {
     ).to.equal('ok!');
 
     expect(fn).to.have.callCount(5);
+  });
+
+  it('applies Policy.use', async () => {
+    class Calculator {
+      @Policy.use(
+        Policy.handleAll()
+          .retry()
+          .attempts(5),
+      )
+      public double(n: number, context?: IRetryContext) {
+        if (context!.attempt < 2) {
+          throw new Error('failed');
+        }
+
+        return { n: n * 2, ...context };
+      }
+    }
+
+    const c = new Calculator();
+    expect(await c.double(2)).to.deep.equal({
+      n: 4,
+      attempt: 2,
+    });
   });
 });

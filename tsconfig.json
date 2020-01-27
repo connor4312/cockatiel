@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "forceConsistentCasingInFileNames": true,
+    "experimentalDecorators": true,
     "sourceMap": true,
     "declaration": true,
     "noImplicitReturns": true,

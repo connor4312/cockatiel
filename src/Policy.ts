@@ -195,6 +195,46 @@ export class Policy {
     return new TimeoutPolicy(duration, strategy);
   }
 
+  /**
+   * A decorator that can be used to wrap class methods and apply the given
+   * policy to them. It also adds the last argument normally given in
+   * {@link Policy.execute} as the last argument in the function call.
+   * For example:
+   *
+   * ```ts
+   * import { Policy } from 'cockatiel';
+   *
+   * const retry = Policy.handleAll().retry().attempts(3);
+   *
+   * class Database {
+   *   @Policy.use(retry)
+   *   public getUserInfo(userId, context) {
+   *     console.log('Retry attempt number', context.attempt);
+   *     // implementation here
+   *   }
+   * }
+   *
+   * const db = new Database();
+   * db.getUserInfo(3).then(info => console.log('User 3 info:', info))
+   * ```
+   *
+   * Note that it will force the return type to be a Promise, since that's
+   * what policies return.
+   */
+  public static use(policy: IPolicy<unknown, never>) {
+    // tslint:disable-next-line: variable-name
+    return (_target: unknown, _key: string, descriptor: PropertyDescriptor) => {
+      const inner = descriptor.value;
+      if (typeof inner !== 'function') {
+        throw new Error(`Can only decorate functions with @cockatiel, got ${typeof inner}`);
+      }
+
+      descriptor.value = function(this: unknown, ...args: any[]) {
+        return policy.execute(context => inner.apply(this, [...args, context]));
+      };
+    };
+  }
+
   protected constructor(private readonly options: Readonly<IBasePolicyOptions>) {}
 
   /**
