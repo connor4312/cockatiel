@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 - 2019-01-26
+
+- **feat**: add new `Policy.use()` decorator
+
 ## 0.1.2 - 2019-12-12
 
 - **fix**: wrong typing information for options to `retry.exponential()`
