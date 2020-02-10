@@ -3,6 +3,14 @@ import { EventEmitter } from './common/Event';
 import { TaskCancelledError } from './errors/TaskCancelledError';
 import { IPolicy } from './Policy';
 
+export interface ITimeoutOptions {
+  /**
+   * Whether to unreference the internal timer. This means the policy will not
+   * keep the Node.js even loop active. Defaults to `true`.
+   */
+  unref?: boolean;
+}
+
 export enum TimeoutStrategy {
   /**
    * Cooperative timeouts will simply revoke the inner cancellation token,
@@ -22,6 +30,7 @@ export interface ICancellationContext {
 
 export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   private readonly timeoutEmitter = new EventEmitter<void>();
+  private readonly unref: boolean;
 
   /**
    * Event that fires when a function times out.
@@ -29,7 +38,13 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   // tslint:disable-next-line: member-ordering
   public readonly onTimeout = this.timeoutEmitter.addListener;
 
-  constructor(private readonly duration: number, private readonly strategy: TimeoutStrategy) {}
+  constructor(
+    private readonly duration: number,
+    private readonly strategy: TimeoutStrategy,
+    { unref = true }: ITimeoutOptions = {},
+  ) {
+    this.unref = unref;
+  }
 
   /**
    * Executes the given function.
@@ -39,6 +54,9 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   public async execute<T>(fn: (context: ICancellationContext) => PromiseLike<T> | T): Promise<T> {
     const cts = new CancellationTokenSource();
     const timer = setTimeout(() => cts.cancel(), this.duration);
+    if (this.unref) {
+      timer.unref();
+    }
 
     try {
       if (this.strategy === TimeoutStrategy.Cooperative) {

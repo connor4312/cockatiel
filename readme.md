@@ -68,7 +68,7 @@ This table lists the API which Cockatiel provides. I recommend reading the [Poll
 - [x] [Events](#events)
   - [Event.toPromise(event[, cancellationToken])](#eventtopromiseevent-cancellationtoken)
   - [Event.once(event, callback)](#eventonceevent-callback)
-- [x] [Policy.retry](#policyretry)
+- [x] [Policy.retry](#policyretryoptions)
   - [retry.execute(fn)](#retryexecutefn)
   - [retry.attempts(count)](#retryattemptscount)
   - [retry.delay(amount)](#retrydelayamount)
@@ -85,7 +85,7 @@ This table lists the API which Cockatiel provides. I recommend reading the [Poll
   - [breaker.onBreak(callback)](#breakeronbreakcallback)
   - [breaker.onReset(callback)](#breakeronresetcallback)
   - [breaker.isolate()](#breakerisolate)
-- [x] [Policy.timeout](#policytimeoutduration-strategy)
+- [x] [Policy.timeout](#policytimeoutduration-strategy-options)
   - [timeout.execute(fn)](#timeoutexecutefn)
   - [timeout.onTimeout(callback)](#timeoutontimeoutcallback)
 - [x] [Policy.bulkhead](#policybulkheadlimit-queue)
@@ -175,7 +175,7 @@ const result = await Policy
   .execute(({ cancellation }) => getData(cancellation)));
 ```
 
-The `context` argument passed to the executed function is the merged object of all previous policies. So for instance, in the above example you'll get the cancellation token from the [TimeoutPolicy](#policytimeoutduration-strategy) as well as the attempt number from the [RetryPolicy](#policyretry):
+The `context` argument passed to the executed function is the merged object of all previous policies. So for instance, in the above example you'll get the cancellation token from the [TimeoutPolicy](#policytimeoutduration-strategy-options) as well as the attempt number from the [RetryPolicy](#policyretryoptions):
 
 ```ts
 Policy.wrap(retry, breaker, timeout).execute(context => {
@@ -383,7 +383,7 @@ const backoff = new CompositeBackoff(
 
 ## `CancellationToken`
 
-Cancellation tokens are prominent in C# land to allow for cooperative cancellation. They're used here for [timeouts](#policytimeoutduration-strategy).
+Cancellation tokens are prominent in C# land to allow for cooperative cancellation. They're used here for [timeouts](#policytimeoutduration-strategy-options).
 
 The `CancellationTokenSource` is the 'factory' that creates `CancellationTokens`, and can be used to cancel and operation. Once cancellation is requested, an event will be emitted on all linked tokens. You can nest cancellation tokens and sources, cancellation cascades down.
 
@@ -512,7 +512,7 @@ async function waitForFallback(policy) {
 }
 ```
 
-## `Policy.retry()`
+## `Policy.retry(options?)`
 
 If you know how to use Polly, you already almost know how to use Cockatiel. The `Policy` object is the base builder, and you can get a RetryBuilder off of that by calling `.retry()`.
 
@@ -526,6 +526,15 @@ const response1 = await Policy.handleAll() // handle all errors
 
 const response1 = await Policy.handleType(NetworkError) // only catch network errors
   .retry()
+  .execute(() => getJson('https://example.com'));
+```
+
+Internally, an referenced timer is created. This means the Node.js event loop is kept active while the execution is pending. Pass `{ unref: true }` to create an unreferenced timer instead:
+
+```ts
+const response1 = await Policy.handleAll() // handle all errors
+  .retry({ unref: true }) // get a RetryBuilder
+  .attempts(3) // retry three times, with no delay
   .execute(() => getJson('https://example.com'));
 ```
 
@@ -757,9 +766,11 @@ const handle = breaker.isolate();
 handle.dispose();
 ```
 
-## `Policy.timeout(duration, strategy)`
+## `Policy.timeout(duration, strategy, options?)`
 
 Creates a timeout policy. The duration specifies how long to wait before timing out `execute()`'d functions. The strategy for timeouts, "Cooperative" or "Aggressive". A [ CancellationToken](#cancellationtoken) will be pass to any executed function, and in cooperative timeouts we'll simply wait for that function to return or throw. In aggressive timeouts, we'll immediately throw a TaskCancelledError when the timeout is reached, in addition to marking the passed token as failed.
+
+Internally, an unreferenced timer is created. This means the Node.js event loop is not kept active while the execution is pending. Pass `{ unref: false }` as the third argument to create a referenced timer instead.
 
 ```js
 import { TimeoutStrategy, Policy, TaskCancelledError } from 'cockatiel';

@@ -2,8 +2,13 @@ import { IBreaker } from './breaker/Breaker';
 import { BulkheadPolicy } from './BulkheadPolicy';
 import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
 import { FallbackPolicy } from './FallbackPolicy';
-import { IRetryContext, RetryPolicy } from './RetryPolicy';
-import { ICancellationContext, TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
+import { IRetryContext, IRetryOptions, RetryPolicy } from './RetryPolicy';
+import {
+  ICancellationContext,
+  ITimeoutOptions,
+  TimeoutPolicy,
+  TimeoutStrategy,
+} from './TimeoutPolicy';
 
 type Constructor<T> = new (...args: any) => T;
 
@@ -191,8 +196,8 @@ export class Policy {
    * {@link TaskCancelledError} when the timeout is reached, in addition to
    * marking the passed token as failed.
    */
-  public static timeout(duration: number, strategy: TimeoutStrategy) {
-    return new TimeoutPolicy(duration, strategy);
+  public static timeout(duration: number, strategy: TimeoutStrategy, options?: ITimeoutOptions) {
+    return new TimeoutPolicy(duration, strategy, options);
   }
 
   /**
@@ -335,8 +340,9 @@ export class Policy {
   /**
    * Returns a retry policy builder.
    */
-  public retry() {
+  public retry(options?: IRetryOptions) {
     return new RetryPolicy({
+      ...options,
       errorFilter: this.options.errorFilter,
       resultFilter: this.options.resultFilter,
     });

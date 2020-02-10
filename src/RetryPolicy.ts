@@ -7,7 +7,21 @@ import { EventEmitter } from './common/Event';
 import { execute } from './common/execute';
 import { FailureReason, IBasePolicyOptions, IPolicy } from './Policy';
 
-const delay = (duration: number) => new Promise(resolve => setTimeout(resolve, duration));
+const delay = (duration: number, unref: boolean) =>
+  new Promise(resolve => {
+    const timer = setTimeout(resolve, duration);
+    if (unref) {
+      timer.unref();
+    }
+  });
+
+export interface IRetryOptions {
+  /**
+   * Whether to unreference the internal timer. This means the policy will not
+   * keep the Node.js even loop active. Defaults to `false`.
+   */
+  unref?: boolean;
+}
 
 /**
  * Context passed into the execute method of the builder.
@@ -37,6 +51,8 @@ export interface IRetryPolicyConfig extends IBasePolicyOptions {
 export class RetryPolicy implements IPolicy<IRetryContext> {
   private onRetryEmitter = new EventEmitter<FailureReason<unknown> & { delay: number }>();
   private onGiveUpEmitter = new EventEmitter<FailureReason<unknown>>();
+  private options: IRetryPolicyConfig;
+  private readonly unref: boolean;
 
   /**
    * Emitter that fires when we retry a call, before any backoff.
@@ -51,7 +67,10 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   // tslint:disable-next-line: member-ordering
   public readonly onGiveUp = this.onGiveUpEmitter.addListener;
 
-  constructor(private options: IRetryPolicyConfig) {}
+  constructor({ unref = false, ...options }: IRetryOptions & IRetryPolicyConfig) {
+    this.unref = false;
+    this.options = options;
+  }
 
   /**
    * Sets the number of retry attempts for the function.
@@ -109,7 +128,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
 
       if (backoff) {
         const delayDuration = backoff.duration();
-        const delayPromise = delay(delayDuration);
+        const delayPromise = delay(delayDuration, this.unref);
         // A little sneaky reordering here lets us use Sinon's fake timers
         // when we get an emission in our tests.
         this.onRetryEmitter.emit({ ...result, delay: delayDuration });
