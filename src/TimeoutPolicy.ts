@@ -45,7 +45,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
         return await fn({ cancellation: cts.token });
       }
 
-      return Promise.race<T>([
+      return await Promise.race<T>([
         fn({ cancellation: cts.token }),
         cts.token.cancellation(cts.token).then(() => {
           throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);
