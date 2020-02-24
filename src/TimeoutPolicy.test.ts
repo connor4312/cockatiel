@@ -30,6 +30,7 @@ describe('TimeoutPolicy', () => {
     const verified = defer();
     await expect(
       policy.execute(async ({ cancellation }) => {
+		await delay(0);
         expect(cancellation.isCancellationRequested).to.be.false;
         await delay(3);
         expect(cancellation.isCancellationRequested).to.be.true;
