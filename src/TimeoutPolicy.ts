@@ -29,7 +29,24 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   // tslint:disable-next-line: member-ordering
   public readonly onTimeout = this.timeoutEmitter.addListener;
 
-  constructor(private readonly duration: number, private readonly strategy: TimeoutStrategy) {}
+  constructor(
+    private readonly duration: number,
+    private readonly strategy: TimeoutStrategy,
+    private readonly unref = false,
+  ) {}
+
+  /**
+   * When timing out, a referenced timer is created. This means the Node.js
+   * event loop is kept active while we're waiting for the timeout, as long as
+   * the function hasn't returned. Calling this method on the timeout builder
+   * will unreference the timer, allowing the process to exit even if a
+   * timeout might still be happening.
+   */
+  public dangerouslyUnref() {
+    const t = new TimeoutPolicy(this.duration, this.strategy, true);
+    t.onTimeout(() => this.timeoutEmitter.emit());
+    return t;
+  }
 
   /**
    * Executes the given function.
@@ -39,6 +56,9 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   public async execute<T>(fn: (context: ICancellationContext) => PromiseLike<T> | T): Promise<T> {
     const cts = new CancellationTokenSource();
     const timer = setTimeout(() => cts.cancel(), this.duration);
+    if (this.unref) {
+      timer.unref();
+    }
 
     try {
       if (this.strategy === TimeoutStrategy.Cooperative) {

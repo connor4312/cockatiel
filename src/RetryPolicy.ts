@@ -7,7 +7,13 @@ import { EventEmitter } from './common/Event';
 import { execute } from './common/execute';
 import { FailureReason, IBasePolicyOptions, IPolicy } from './Policy';
 
-const delay = (duration: number) => new Promise(resolve => setTimeout(resolve, duration));
+const delay = (duration: number, unref: boolean) =>
+  new Promise(resolve => {
+    const timer = setTimeout(resolve, duration);
+    if (unref) {
+      timer.unref();
+    }
+  });
 
 /**
  * Context passed into the execute method of the builder.
@@ -32,6 +38,12 @@ export interface IRetryBackoffContext<R> extends IRetryContext {
 
 export interface IRetryPolicyConfig extends IBasePolicyOptions {
   backoff?: IBackoff<IRetryBackoffContext<unknown>>;
+
+  /**
+   * Whether to unreference the internal timer. This means the policy will not
+   * keep the Node.js even loop active. Defaults to `false`.
+   */
+  unref?: boolean;
 }
 
 export class RetryPolicy implements IPolicy<IRetryContext> {
@@ -51,7 +63,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   // tslint:disable-next-line: member-ordering
   public readonly onGiveUp = this.onGiveUpEmitter.addListener;
 
-  constructor(private options: IRetryPolicyConfig) {}
+  constructor(private options: Readonly<IRetryPolicyConfig>) {}
 
   /**
    * Sets the number of retry attempts for the function.
@@ -94,6 +106,16 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   }
 
   /**
+   * When retrying, a referenced timer is created. This means the Node.js event
+   * loop is kept active while we're delaying a retried call. Calling this
+   * method on the retry builder will unreference the timer, allowing the
+   * process to exit even if a retry might still be pending.
+   */
+  public dangerouslyUnref() {
+    return this.derivePolicy({ ...this.options, unref: true });
+  }
+
+  /**
    * Executes the given function with retries.
    * @param fn -- Function to run
    * @returns a Promise that resolves or rejects with the function results.
@@ -109,7 +131,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
 
       if (backoff) {
         const delayDuration = backoff.duration();
-        const delayPromise = delay(delayDuration);
+        const delayPromise = delay(delayDuration, !!this.options.unref);
         // A little sneaky reordering here lets us use Sinon's fake timers
         // when we get an emission in our tests.
         this.onRetryEmitter.emit({ ...result, delay: delayDuration });
@@ -132,7 +154,13 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
       backoff = new CompositeBackoff(bias, this.options.backoff, backoff);
     }
 
-    this.options = { ...this.options, backoff };
-    return this;
+    return this.derivePolicy({ ...this.options, backoff });
+  }
+
+  private derivePolicy(newOptions: Readonly<IRetryPolicyConfig>) {
+    const p = new RetryPolicy(newOptions);
+    p.onGiveUp(evt => this.onGiveUpEmitter.emit(evt));
+    p.onRetry(evt => this.onRetryEmitter.emit(evt));
+    return p;
   }
 }

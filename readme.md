@@ -77,6 +77,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`retry.exponential(options)`](#retryexponentialoptions)
   - [`retry.delegate(fn)`](#retrydelegatefn)
   - [`retry.backoff(policy)`](#retrybackoffpolicy)
+  - [`retry.dangerouslyUnref()`](#retrydangerouslyunref)
   - [`retry.onRetry(callback)`](#retryonretrycallback)
   - [`retry.onGiveUp(callback)`](#retryongiveupcallback)
 - [`Policy.circuitBreaker(openAfter, breaker)`](#policycircuitbreakeropenafter-breaker)
@@ -88,6 +89,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`breaker.onReset(callback)`](#breakeronresetcallback)
   - [`breaker.isolate()`](#breakerisolate)
 - [`Policy.timeout(duration, strategy)`](#policytimeoutduration-strategy)
+  - [`timeout.dangerouslyUnref()`](#timeoutdangerouslyunref)
   - [`timeout.execute(fn)`](#timeoutexecutefn)
   - [`timeout.onTimeout(callback)`](#timeoutontimeoutcallback)
 - [`Policy.bulkhead(limit[, queue])`](#policybulkheadlimit-queue)
@@ -607,6 +609,18 @@ Policy.handleAll()
 // ...
 ```
 
+### `retry.dangerouslyUnref()`
+
+When retrying, a referenced timer is created. This means the Node.js event loop is kept active while we're delaying a retried call. Calling this method on the retry builder will unreference the timer, allowing the process to exit even if a retry might still be pending:
+
+```ts
+const response1 = await Policy.handleAll() // handle all errors
+  .retry() // get a RetryBuilder
+  .dangerouslyUnref() // unreference the timer
+  .attempts(3) // retry three times, with no delay
+  .execute(() => getJson('https://example.com'));
+```
+
 ### `retry.onRetry(callback)`
 
 An [event emitter](#events) that fires when we retry a call, before any backoff. It's invoked with an object that includes:
@@ -781,6 +795,10 @@ export async function handleRequest() {
   }
 }
 ```
+
+### `timeout.dangerouslyUnref()`
+
+When timing out, a referenced timer is created. This means the Node.js event loop is kept active while we're waiting for the timeout, as long as the function hasn't returned. Calling this method on the timeout builder will unreference the timer, allowing the process to exit even if a timeout might still be happening.
 
 ### `timeout.execute(fn)`
 

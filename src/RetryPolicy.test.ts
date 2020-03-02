@@ -1,6 +1,7 @@
 import { expect, use } from 'chai';
 import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
 import { noJitterGenerator } from './backoff/Backoff';
+import { runInChild } from './common/util.test';
 import { Policy } from './Policy';
 import { RetryPolicy } from './RetryPolicy';
 
@@ -164,5 +165,36 @@ describe('RetryPolicy', () => {
     ).to.eventually.be.rejectedWith(MyErrorB);
 
     expect(s).to.have.callCount(6);
+  });
+
+  it('does not unref by default', async () => {
+    const output = await runInChild(`
+      Policy.handleAll()
+        .retry()
+        .attempts(1)
+        .delay(1)
+        .execute(() => {
+          console.log('attempt');
+          throw new Error('oh no!');
+        });
+    `);
+
+    expect(output).to.contain('oh no!');
+  });
+
+  it('unrefs as requested', async () => {
+    const output = await runInChild(`
+      Policy.handleAll()
+        .retry()
+        .dangerouslyUnref()
+        .attempts(1)
+        .delay(1)
+        .execute(() => {
+          console.log('attempt');
+          throw new Error('oh no!');
+        });
+    `);
+
+    expect(output).to.equal('attempt');
   });
 });
