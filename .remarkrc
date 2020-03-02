@@ -1,0 +1,6 @@
+{
+  "plugins": {
+    "validate-links": {},
+    "remark-toc": { "tight": true }
+  }
+}
