@@ -3,6 +3,7 @@
 ## 0.1.9 - 2020-06-16
 
 - **feat**: add `isBrokenCircuitError`, `isBulkheadRejectedError`, `isIsolatedCircuitError`, `isTaskCancelledError` methods to the errors and matching predicate functions
+- **fix**: add `onHalfOpen` event to the circuit breaker
 - **fix**: `retry.exponential()` requiring an argument when it should have been optional
 
 ## 0.1.5 - 2020-03-01

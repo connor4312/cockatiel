@@ -87,6 +87,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`breaker.state`](#breakerstate)
   - [`breaker.onBreak(callback)`](#breakeronbreakcallback)
   - [`breaker.onReset(callback)`](#breakeronresetcallback)
+  - [`breaker.onHalfOpen(callback)`](#breakeronhalfopencallback)
   - [`breaker.isolate()`](#breakerisolate)
 - [`Policy.timeout(duration, strategy)`](#policytimeoutduration-strategy)
   - [`timeout.dangerouslyUnref()`](#timeoutdangerouslyunref)
@@ -754,6 +755,17 @@ listener.dispose();
 ### `breaker.onReset(callback)`
 
 An [event emitter](#events) that fires when the circuit closes after being broken. Returns a disposable instance.
+
+```js
+const listener = breaker.onReset(() => console.log('circuit is closed'));
+
+// later:
+listener.dispose();
+```
+
+### `breaker.onHalfOpen(callback)`
+
+An [event emitter](#events) when the circuit breaker is half open (running a test call). Either `onBreak` on `onReset` will subsequently fire.
 
 ```js
 const listener = breaker.onReset(() => console.log('circuit is closed'));

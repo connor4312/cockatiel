@@ -16,14 +16,17 @@ describe('CircuitBreakerPolicy', () => {
   let clock: SinonFakeTimers;
   let onBreak: SinonStub;
   let onReset: SinonStub;
+  let onHalfOpen: SinonStub;
 
   beforeEach(() => {
     p = Policy.handleType(MyException).circuitBreaker(1000, new ConsecutiveBreaker(2));
     clock = useFakeTimers();
     onBreak = stub();
     onReset = stub();
+    onHalfOpen = stub();
     p.onBreak(onBreak);
     p.onReset(onReset);
+    p.onHalfOpen(onHalfOpen);
   });
 
   afterEach(() => {
@@ -66,6 +69,7 @@ describe('CircuitBreakerPolicy', () => {
 
     const result = p.execute(stub().resolves(42));
     expect(p.state).to.equal(CircuitState.HalfOpen);
+    expect(onHalfOpen).calledOnce;
     expect(await result).to.equal(42);
     expect(p.state).to.equal(CircuitState.Closed);
     expect(onReset).calledOnce;

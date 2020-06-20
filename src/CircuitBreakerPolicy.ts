@@ -43,6 +43,7 @@ type InnerState =
 export class CircuitBreakerPolicy implements IPolicy<void> {
   private readonly breakEmitter = new EventEmitter<FailureReason<unknown> | { isolated: true }>();
   private readonly resetEmitter = new EventEmitter<void>();
+  private readonly halfOpenEmitter = new EventEmitter<void>();
   private innerLastFailure?: FailureReason<unknown>;
   private innerState: InnerState = { value: CircuitState.Closed };
 
@@ -57,6 +58,13 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
    */
   // tslint:disable-next-line: member-ordering
   public readonly onReset = this.resetEmitter.addListener;
+
+  /**
+   * Event emitted when the circuit breaker is half open (running a test call).
+   * Either `onBreak` on `onReset` will subsequently fire.
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onHalfOpen = this.halfOpenEmitter.addListener;
 
   /**
    * Gets the current circuit breaker state.
@@ -147,6 +155,8 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
   }
 
   private async halfOpen<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
+    this.halfOpenEmitter.emit();
+
     try {
       const result = await execute(this.options, fn);
       if ('success' in result) {
