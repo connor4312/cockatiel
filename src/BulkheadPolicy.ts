@@ -1,5 +1,6 @@
 import { defer } from './common/defer';
 import { EventEmitter } from './common/Event';
+import { ExecuteWrapper } from './common/Executor';
 import { BulkheadRejectedError } from './errors/BulkheadRejectedError';
 import { IPolicy } from './Policy';
 
@@ -14,8 +15,21 @@ interface IQueueItem<T> {
  */
 export class BulkheadPolicy implements IPolicy<void> {
   private active = 0;
-  private queue: Array<IQueueItem<unknown>> = [];
-  private onRejectEmitter = new EventEmitter<void>();
+  private readonly queue: Array<IQueueItem<unknown>> = [];
+  private readonly onRejectEmitter = new EventEmitter<void>();
+  private readonly executor = new ExecuteWrapper();
+
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onSuccess = this.executor.onSuccess;
+
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onFailure = this.executor.onFailure;
 
   /**
    * Emitter that fires when an item is rejected from the bulkhead.

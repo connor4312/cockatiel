@@ -1,20 +1,20 @@
-import { EventEmitter } from './common/Event';
-import { execute } from './common/execute';
-import { FailureReason, IBasePolicyOptions, IPolicy } from './Policy';
+import { ExecuteWrapper } from './common/Executor';
+import { IPolicy } from './Policy';
 
 export class FallbackPolicy<AltReturn> implements IPolicy<void, AltReturn> {
-  private readonly fallbackEmitter = new EventEmitter<FailureReason<unknown>>();
-
   /**
-   * Event that fires when a fallback happens.
+   * @inheritdoc
    */
   // tslint:disable-next-line: member-ordering
-  public readonly onFallback = this.fallbackEmitter.addListener;
+  public readonly onSuccess = this.executor.onSuccess;
 
-  constructor(
-    private readonly options: IBasePolicyOptions,
-    private readonly value: () => AltReturn,
-  ) {}
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onFailure = this.executor.onFailure;
+
+  constructor(private readonly executor: ExecuteWrapper, private readonly value: () => AltReturn) {}
 
   /**
    * Executes the given function.
@@ -22,12 +22,11 @@ export class FallbackPolicy<AltReturn> implements IPolicy<void, AltReturn> {
    * @returns The function result or fallback value.
    */
   public async execute<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T | AltReturn> {
-    const result = await execute(this.options, fn);
+    const result = await this.executor.invoke(fn);
     if ('success' in result) {
       return result.success;
     }
 
-    this.fallbackEmitter.emit(result);
     return this.value();
   }
 }

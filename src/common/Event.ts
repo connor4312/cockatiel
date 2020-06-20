@@ -81,6 +81,13 @@ export class EventEmitter<T> {
   public readonly addListener: Event<T> = listener => this.addListenerInner(listener);
 
   /**
+   * Gets the number of event listeners.
+   */
+  public get size() {
+    return this.listeners.size;
+  }
+
+  /**
    * Emits event data.
    */
   public emit(value: T) {

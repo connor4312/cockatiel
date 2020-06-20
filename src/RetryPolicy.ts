@@ -4,8 +4,8 @@ import { ConstantBackoff } from './backoff/ConstantBackoff';
 import { DelegateBackoff, DelegateBackoffFn } from './backoff/DelegateBackoff';
 import { IterableBackoff } from './backoff/IterableBackoff';
 import { EventEmitter } from './common/Event';
-import { execute } from './common/execute';
-import { FailureReason, IBasePolicyOptions, IPolicy } from './Policy';
+import { ExecuteWrapper } from './common/Executor';
+import { FailureReason, IPolicy } from './Policy';
 
 const delay = (duration: number, unref: boolean) =>
   new Promise(resolve => {
@@ -36,7 +36,7 @@ export interface IRetryBackoffContext<R> extends IRetryContext {
   result: FailureReason<R>;
 }
 
-export interface IRetryPolicyConfig extends IBasePolicyOptions {
+export interface IRetryPolicyConfig {
   backoff?: IBackoff<IRetryBackoffContext<unknown>>;
 
   /**
@@ -47,8 +47,20 @@ export interface IRetryPolicyConfig extends IBasePolicyOptions {
 }
 
 export class RetryPolicy implements IPolicy<IRetryContext> {
-  private onRetryEmitter = new EventEmitter<FailureReason<unknown> & { delay: number }>();
-  private onGiveUpEmitter = new EventEmitter<FailureReason<unknown>>();
+  private readonly onGiveUpEmitter = new EventEmitter<FailureReason<unknown>>();
+  private readonly onRetryEmitter = new EventEmitter<FailureReason<unknown> & { delay: number }>();
+
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onSuccess = this.executor.onSuccess;
+
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onFailure = this.executor.onFailure;
 
   /**
    * Emitter that fires when we retry a call, before any backoff.
@@ -58,12 +70,15 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   public readonly onRetry = this.onRetryEmitter.addListener;
 
   /**
-   * Emitter that fires when we retry a call.
+   * @deprecated use `onFailure` instead
    */
   // tslint:disable-next-line: member-ordering
   public readonly onGiveUp = this.onGiveUpEmitter.addListener;
 
-  constructor(private options: Readonly<IRetryPolicyConfig>) {}
+  constructor(
+    private options: Readonly<IRetryPolicyConfig>,
+    private readonly executor: ExecuteWrapper,
+  ) {}
 
   /**
    * Sets the number of retry attempts for the function.
@@ -124,7 +139,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
     let backoff: IBackoff<IRetryBackoffContext<unknown>> | undefined =
       this.options.backoff || new ConstantBackoff(0, 1);
     for (let retries = 0; ; retries++) {
-      const result = await execute(this.options, fn, { attempt: retries });
+      const result = await this.executor.invoke(fn, { attempt: retries });
       if ('success' in result) {
         return result.success;
       }
@@ -158,8 +173,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   }
 
   private derivePolicy(newOptions: Readonly<IRetryPolicyConfig>) {
-    const p = new RetryPolicy(newOptions);
-    p.onGiveUp(evt => this.onGiveUpEmitter.emit(evt));
+    const p = new RetryPolicy(newOptions, this.executor.derive());
     p.onRetry(evt => this.onRetryEmitter.emit(evt));
     return p;
   }

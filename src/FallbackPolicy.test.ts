@@ -13,13 +13,17 @@ describe('FallbackPolicy', () => {
   it('returns a fallback and emits an error if necessary', async () => {
     const policy = await Policy.handleAll().fallback('error');
     const onFallback = stub();
-    policy.onFallback(onFallback);
+    policy.onFailure(onFallback);
 
     const error = new Error('oh no!');
     const result = await policy.execute(() => {
       throw error;
     });
     expect(result).to.equal('error');
-    expect(onFallback).calledWith({ error });
+    expect(onFallback).calledWith({
+      reason: { error },
+      handled: true,
+      duration: onFallback.args[0]?.[0].duration,
+    });
   });
 });

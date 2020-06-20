@@ -1,5 +1,6 @@
 import { CancellationToken, CancellationTokenSource } from './CancellationToken';
 import { EventEmitter } from './common/Event';
+import { ExecuteWrapper, returnOrThrow } from './common/Executor';
 import { TaskCancelledError } from './errors/TaskCancelledError';
 import { IPolicy } from './Policy';
 
@@ -24,14 +25,27 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   private readonly timeoutEmitter = new EventEmitter<void>();
 
   /**
-   * Event that fires when a function times out.
+   * @inheritdoc
    */
   // tslint:disable-next-line: member-ordering
   public readonly onTimeout = this.timeoutEmitter.addListener;
 
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onFailure = this.executor.onFailure;
+
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onSuccess = this.executor.onSuccess;
+
   constructor(
     private readonly duration: number,
     private readonly strategy: TimeoutStrategy,
+    private readonly executor = new ExecuteWrapper(),
     private readonly unref = false,
   ) {}
 
@@ -43,8 +57,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
    * timeout might still be happening.
    */
   public dangerouslyUnref() {
-    const t = new TimeoutPolicy(this.duration, this.strategy, true);
-    t.onTimeout(() => this.timeoutEmitter.emit());
+    const t = new TimeoutPolicy(this.duration, this.strategy, this.executor, true);
     return t;
   }
 
@@ -62,12 +75,13 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
 
     try {
       if (this.strategy === TimeoutStrategy.Cooperative) {
-        return await fn({ cancellation: cts.token });
+        return returnOrThrow(await this.executor.invoke(fn, { cancellation: cts.token }));
       }
 
       return await Promise.race<T>([
-        fn({ cancellation: cts.token }),
+        this.executor.invoke(fn, { cancellation: cts.token }).then(returnOrThrow),
         cts.token.cancellation(cts.token).then(() => {
+          this.timeoutEmitter.emit();
           throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);
         }),
       ]);

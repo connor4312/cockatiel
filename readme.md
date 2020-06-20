@@ -79,6 +79,8 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`retry.backoff(policy)`](#retrybackoffpolicy)
   - [`retry.dangerouslyUnref()`](#retrydangerouslyunref)
   - [`retry.onRetry(callback)`](#retryonretrycallback)
+  - [`retry.onSuccess(callback)`](#retryonsuccesscallback)
+  - [`retry.onFailure(callback)`](#retryonfailurecallback)
   - [`retry.onGiveUp(callback)`](#retryongiveupcallback)
 - [`Policy.circuitBreaker(openAfter, breaker)`](#policycircuitbreakeropenafter-breaker)
   - [`ConsecutiveBreaker`](#consecutivebreaker)
@@ -88,19 +90,27 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`breaker.onBreak(callback)`](#breakeronbreakcallback)
   - [`breaker.onReset(callback)`](#breakeronresetcallback)
   - [`breaker.onHalfOpen(callback)`](#breakeronhalfopencallback)
+  - [`breaker.onStateChange(callback)`](#breakeronstatechangecallback)
+  - [`breaker.onSuccess(callback)`](#breakeronsuccesscallback)
+  - [`breaker.onFailure(callback)`](#breakeronfailurecallback)
   - [`breaker.isolate()`](#breakerisolate)
 - [`Policy.timeout(duration, strategy)`](#policytimeoutduration-strategy)
   - [`timeout.dangerouslyUnref()`](#timeoutdangerouslyunref)
   - [`timeout.execute(fn)`](#timeoutexecutefn)
   - [`timeout.onTimeout(callback)`](#timeoutontimeoutcallback)
+  - [`timeout.onSuccess(callback)`](#timeoutonsuccesscallback)
+  - [`timeout.onFailure(callback)`](#timeoutonfailurecallback)
 - [`Policy.bulkhead(limit[, queue])`](#policybulkheadlimit-queue)
   - [`bulkhead.execute(fn)`](#bulkheadexecutefn)
   - [`bulkhead.onReject(callback)`](#bulkheadonrejectcallback)
+  - [`bulkhead.onSuccess(callback)`](#bulkheadonsuccesscallback)
+  - [`bulkhead.onFailure(callback)`](#bulkheadonfailurecallback)
   - [`bulkhead.executionSlots`](#bulkheadexecutionslots)
   - [`bulkhead.queueSlots`](#bulkheadqueueslots)
 - [`Policy.fallback(valueOrFactory)`](#policyfallbackvalueorfactory)
   - [`fallback.execute(fn)`](#fallbackexecutefn)
-  - [`fallback.onFallback(callback)`](#fallbackonfallbackcallback)
+  - [`fallback.onSuccess(callback)`](#fallbackonsuccesscallback)
+  - [`fallback.onFailure(callback)`](#fallbackonfailurecallback)
 
 ## `Policy`
 
@@ -474,10 +484,10 @@ await token.cancelled();
 
 Cockatiel uses a simple bespoke style for events, similar to those that we use in VS Code. These events provide better type-safety (you can never subscribe to the wrong event name) and better functionality around triggering listeners, which we use to implement cancellation tokens.
 
-An event can be subscribed to simply by passing a callback. Take [`onFallback`](#fallbackonfallbackcallback) for instance:
+An event can be subscribed to simply by passing a callback. Take [`onFailure`](#fallbackonfailurecallback) for instance:
 
 ```js
-const listener = policy.onFallback(error => {
+const listener = policy.onFailure(error => {
   console.log(error);
 });
 ```
@@ -638,6 +648,33 @@ const listener = retry.onRetry(reason => console.log('retrying a function call:'
 listener.dispose();
 ```
 
+### `retry.onSuccess(callback)`
+
+An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
+
+```js
+const listener = retry.onSuccess({ duration }) => {
+  console.log(`retry call ran in ${duration}ms`);
+});
+
+// later:
+listener.dispose();
+```
+
+### `retry.onFailure(callback)`
+
+An [event emitter](#events) that fires whenever a function throw an error or returns an errorful result. It's invoked with the duration of the call, the reason for the failure, and an boolean indicating whether the error is handled by the policy.
+
+```js
+const listener = retry.onFailure({ duration, handled, reason }) => {
+  console.log(`retry call ran in ${duration}ms and failed with`, reason);
+  console.log(handled ? 'error was handled' : 'error was not handled');
+});
+
+// later:
+listener.dispose();
+```
+
 ### `retry.onGiveUp(callback)`
 
 An [event emitter](#events) that fires when we're no longer retrying a call and are giving up. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#policyhandleresulttypector-filter). Useful for telemetry. Returns a dispable instance.
@@ -768,7 +805,51 @@ listener.dispose();
 An [event emitter](#events) when the circuit breaker is half open (running a test call). Either `onBreak` on `onReset` will subsequently fire.
 
 ```js
-const listener = breaker.onReset(() => console.log('circuit is closed'));
+const listener = breaker.onHalfOpen(() => console.log('circuit is testing a request'));
+
+// later:
+listener.dispose();
+```
+
+### `breaker.onStateChange(callback)`
+
+An [event emitter](#events) that fires whenever the circuit state changes in general, after the more specific `onReset`, `onHalfOpen`, `onBreak` emitters fires.
+
+```js
+import { CircuitState } from 'cockatiel';
+
+const listener = breaker.onStateChange(state => {
+  if (state === CircuitState.Closed) {
+    console.log('circuit breaker is once again closed');
+  }
+});
+
+// later:
+listener.dispose();
+```
+
+### `breaker.onSuccess(callback)`
+
+An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
+
+```js
+const listener = breaker.onSuccess({ duration }) => {
+  console.log(`circuit breaker call ran in ${duration}ms`);
+});
+
+// later:
+listener.dispose();
+```
+
+### `breaker.onFailure(callback)`
+
+An [event emitter](#events) that fires whenever a function throw an error or returns an errorful result. It's invoked with the duration of the call, the reason for the failure, and an boolean indicating whether the error is handled by the policy.
+
+```js
+const listener = breaker.onFailure({ duration, handled, reason }) => {
+  console.log(`circuit breaker call ran in ${duration}ms and failed with`, reason);
+  console.log(handled ? 'error was handled' : 'error was not handled');
+});
 
 // later:
 listener.dispose();
@@ -831,6 +912,35 @@ const listener = timeout.onTimeout(() => console.log('timeout was reached'));
 listener.dispose();
 ```
 
+### `timeout.onSuccess(callback)`
+
+An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
+
+```js
+const listener = timeout.onSuccess({ duration }) => {
+  console.log(`timeout call ran in ${duration}ms`);
+});
+
+// later:
+listener.dispose();
+```
+
+### `timeout.onFailure(callback)`
+
+An [event emitter](#events) that fires whenever a function throw an error or returns an errorful result. It's invoked with the duration of the call, the reason for the failure, and an boolean indicating whether the error is handled by the policy.
+
+This is _only_ called when the function itself fails, and not when a timeout happens.
+
+```js
+const listener = timeout.onFailure({ duration, handled, reason }) => {
+  console.log(`timeout call ran in ${duration}ms and failed with`, reason);
+  console.log(handled ? 'error was handled' : 'error was not handled');
+});
+
+// later:
+listener.dispose();
+```
+
 ## `Policy.bulkhead(limit[, queue])`
 
 A Bulkhead is a simple structure that limits the number of concurrent calls. Attempting to exceed the capacity will cause `execute()` to throw a `BulkheadRejectedError`.
@@ -883,6 +993,35 @@ const listener = bulkhead.onReject(() => console.log('bulkhead call was rejected
 listener.dispose();
 ```
 
+### `bulkhead.onSuccess(callback)`
+
+An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
+
+```js
+const listener = bulkhead.onSuccess({ duration }) => {
+  console.log(`bulkhead call ran in ${duration}ms`);
+});
+
+// later:
+listener.dispose();
+```
+
+### `bulkhead.onFailure(callback)`
+
+An [event emitter](#events) that fires whenever a function throw an error or returns an errorful result. It's invoked with the duration of the call, the reason for the failure, and an boolean indicating whether the error is handled by the policy.
+
+This is _only_ called when the function itself fails, and not when a bulkhead rejection occurs.
+
+```js
+const listener = bulkhead.onFailure({ duration, handled, reason }) => {
+  console.log(`bulkhead call ran in ${duration}ms and failed with`, reason);
+  console.log(handled ? 'error was handled' : 'error was not handled');
+});
+
+// later:
+listener.dispose();
+```
+
 ### `bulkhead.executionSlots`
 
 Returns the number of execution slots left in the bulkhead. If either this or `bulkhead.queueSlots` is greater than zero, the `execute()` will not throw a `BulkheadRejectedError`.
@@ -913,12 +1052,30 @@ Executes the given function. Any _handled_ error or errorful value will be eaten
 const result = await fallback.execute(() => getInfoFromDatabase());
 ```
 
-### `fallback.onFallback(callback)`
+### `fallback.onSuccess(callback)`
 
-An [event emitter](#events) that fires when a fallback occurs. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#policyhandleresulttypector-filter). Useful for telemetry. Returns a disposable instance.
+An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
 
 ```js
-const listener = bulkhead.onReject(() => console.log('bulkhead call was rejected'));
+const listener = fallback.onSuccess({ duration }) => {
+  console.log(`fallback call ran in ${duration}ms`);
+});
+
+// later:
+listener.dispose();
+```
+
+### `fallback.onFailure(callback)`
+
+An [event emitter](#events) that fires whenever a function throw an error or returns an errorful result. It's invoked with the duration of the call, the reason for the failure, and an boolean indicating whether the error is handled by the policy.
+
+If the error was handled, the fallback will kick in.
+
+```js
+const listener = fallback.onFailure({ duration, handled, reason }) => {
+  console.log(`fallback call ran in ${duration}ms and failed with`, reason);
+  console.log(handled ? 'error was handled' : 'error was not handled');
+});
 
 // later:
 listener.dispose();

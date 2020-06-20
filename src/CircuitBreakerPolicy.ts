@@ -1,9 +1,9 @@
 import { IBreaker } from './breaker/Breaker';
 import { EventEmitter } from './common/Event';
-import { execute, returnOrThrow } from './common/execute';
+import { ExecuteWrapper, returnOrThrow } from './common/Executor';
 import { BrokenCircuitError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
-import { FailureReason, IBasePolicyOptions, IPolicy } from './Policy';
+import { FailureReason, IPolicy } from './Policy';
 
 export enum CircuitState {
   /**
@@ -29,7 +29,7 @@ export enum CircuitState {
   Isolated,
 }
 
-export interface ICircuitBreakerOptions extends IBasePolicyOptions {
+export interface ICircuitBreakerOptions {
   breaker: IBreaker;
   halfOpenAfter: number;
 }
@@ -44,6 +44,7 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
   private readonly breakEmitter = new EventEmitter<FailureReason<unknown> | { isolated: true }>();
   private readonly resetEmitter = new EventEmitter<void>();
   private readonly halfOpenEmitter = new EventEmitter<void>();
+  private readonly stateChangeEmitter = new EventEmitter<CircuitState>();
   private innerLastFailure?: FailureReason<unknown>;
   private innerState: InnerState = { value: CircuitState.Closed };
 
@@ -67,6 +68,24 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
   public readonly onHalfOpen = this.halfOpenEmitter.addListener;
 
   /**
+   * Fired whenever the circuit breaker state changes.
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onStateChange = this.stateChangeEmitter.addListener;
+
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onSuccess = this.executor.onSuccess;
+
+  /**
+   * @inheritdoc
+   */
+  // tslint:disable-next-line: member-ordering
+  public readonly onFailure = this.executor.onFailure;
+
+  /**
    * Gets the current circuit breaker state.
    */
   public get state(): CircuitState {
@@ -80,7 +99,10 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
     return this.innerLastFailure;
   }
 
-  constructor(private readonly options: ICircuitBreakerOptions) {}
+  constructor(
+    private readonly options: ICircuitBreakerOptions,
+    private readonly executor: ExecuteWrapper,
+  ) {}
 
   /**
    * Manually holds open the circuit breaker.
@@ -90,6 +112,7 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
     if (this.innerState.value !== CircuitState.Isolated) {
       this.innerState = { value: CircuitState.Isolated, counters: 0 };
       this.breakEmitter.emit({ isolated: true });
+      this.stateChangeEmitter.emit(CircuitState.Isolated);
     }
 
     this.innerState.counters++;
@@ -105,6 +128,7 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
         if (this.innerState.value === CircuitState.Isolated && !--this.innerState.counters) {
           this.innerState = { value: CircuitState.Closed };
           this.resetEmitter.emit();
+          this.stateChangeEmitter.emit(CircuitState.Closed);
         }
       },
     };
@@ -122,7 +146,7 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
     const state = this.innerState;
     switch (state.value) {
       case CircuitState.Closed:
-        const result = await execute(this.options, fn);
+        const result = await this.executor.invoke(fn);
         if ('success' in result) {
           this.options.breaker.success(state.value);
         } else {
@@ -144,6 +168,7 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
         }
         const test = this.halfOpen(fn);
         this.innerState = { value: CircuitState.HalfOpen, test };
+        this.stateChangeEmitter.emit(CircuitState.HalfOpen);
         return test;
 
       case CircuitState.Isolated:
@@ -158,7 +183,7 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
     this.halfOpenEmitter.emit();
 
     try {
-      const result = await execute(this.options, fn);
+      const result = await this.executor.invoke(fn);
       if ('success' in result) {
         this.options.breaker.success(CircuitState.HalfOpen);
         this.close();
@@ -184,12 +209,14 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
 
     this.innerState = { value: CircuitState.Open, openedAt: Date.now() };
     this.breakEmitter.emit(reason);
+    this.stateChangeEmitter.emit(CircuitState.Open);
   }
 
   private close() {
     if (this.state === CircuitState.HalfOpen) {
       this.innerState = { value: CircuitState.Closed };
       this.resetEmitter.emit();
+      this.stateChangeEmitter.emit(CircuitState.Closed);
     }
   }
 }

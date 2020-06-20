@@ -9,3 +9,4 @@ export * from './FallbackPolicy';
 export * from './Policy';
 export * from './RetryPolicy';
 export * from './TimeoutPolicy';
+export * from './NoopPolicy';

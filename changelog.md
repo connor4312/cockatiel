@@ -1,10 +1,13 @@
 # Changelog
 
-## 0.1.9 - 2020-06-16
+## 1.0.0 - 2020-06-16
 
-- **feat**: add `isBrokenCircuitError`, `isBulkheadRejectedError`, `isIsolatedCircuitError`, `isTaskCancelledError` methods to the errors and matching predicate functions
-- **fix**: add `onHalfOpen` event to the circuit breaker
-- **fix**: `retry.exponential()` requiring an argument when it should have been optional
+- **breaking:** Node versions <10 are no longer supported.
+- **breaking:** `FallbackPolicy.onFallback` is replaced with `FallbackPolicy.onFailure`. When a failure happens, a fallback will occur.
+- **feat**: add `isBrokenCircuitError`, `isBulkheadRejectedError`, `isIsolatedCircuitError`, `isTaskCancelledError` methods to the errors and matching predicate functions.
+- **feat**: all policies now include `onFailure` and `onSuccess` callbacks for monitoring purposes (see [#20](https://github.com/connor4312/cockatiel/issues/20))
+- **fix**: add `onHalfOpen` event to the circuit breaker (see [#18](https://github.com/connor4312/cockatiel/issues/18))
+- **fix**: `retry.exponential()` requiring an argument when it should have been optional (see [#18](https://github.com/connor4312/cockatiel/issues/18))
 
 ## 0.1.5 - 2020-03-01
 

@@ -1,7 +1,10 @@
 import { IBreaker } from './breaker/Breaker';
 import { BulkheadPolicy } from './BulkheadPolicy';
 import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
+import { Event } from './common/Event';
+import { ExecuteWrapper } from './common/Executor';
 import { FallbackPolicy } from './FallbackPolicy';
+import { NoopPolicy } from './NoopPolicy';
 import { IRetryContext, RetryPolicy } from './RetryPolicy';
 import { ICancellationContext, TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
@@ -25,10 +28,52 @@ export interface IBasePolicyOptions {
 export type FailureReason<ReturnType> = { error: Error } | { value: ReturnType };
 
 /**
+ * Event emitted on the `onFailure` calls.
+ */
+export interface IFailureEvent {
+  /**
+   * Call duration, in milliseconds (with nanosecond precision, as the OS allows).
+   */
+  duration: number;
+
+  /**
+   * Whether the error was handled by the policy.
+   */
+  handled: boolean;
+
+  /**
+   * The reason for the error.
+   */
+  reason: FailureReason<unknown>;
+}
+
+/**
+ * Event emitted on the `onSuccess` calls.
+ */
+export interface ISuccessEvent {
+  /**
+   * Call duration, in milliseconds (with nanosecond precision, as the OS allows).
+   */
+  duration: number;
+}
+
+/**
  * IPolicy is the type of all policies that Cockatiel provides. It describes
  * an execute() function which takes a generic argument.
  */
 export interface IPolicy<ContextType, AltReturn = never> {
+  /**
+   * Fires on the policy when a request successfully completes and some
+   * successful value will be returned. In a retry policy, this is fired once
+   * even if the request took multiple retries to succeed.
+   */
+  readonly onSuccess: Event<ISuccessEvent>;
+
+  /**
+   * Fires on the policy when a request successfully fails and will throw a
+   * rejection to the user.
+   */
+  readonly onFailure: Event<IFailureEvent>;
   execute<T>(fn: (context: ContextType) => PromiseLike<T> | T): Promise<T | AltReturn>;
 }
 
@@ -58,7 +103,7 @@ export class Policy {
   /**
    * A no-op policy, useful for unit tests and stubs.
    */
-  public static readonly noop: IPolicy<any> = { execute: async fn => fn(undefined) };
+  public static readonly noop: IPolicy<any> = new NoopPolicy();
 
   /**
    * Wraps the given set of policies into a single policy. For instance, this:
@@ -132,6 +177,8 @@ export class Policy {
   public static wrap<C, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A>;
   public static wrap<C, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A> {
     return {
+      onFailure: p[0].onFailure,
+      onSuccess: p[0].onSuccess,
       execute<T>(fn: (context: C) => PromiseLike<T> | T): Promise<T | A> {
         const run = (context: any, i: number): PromiseLike<T | A> | T | A =>
           i === p.length ? fn(context) : p[i].execute(next => run({ ...context, ...next }, i + 1));
@@ -336,10 +383,10 @@ export class Policy {
    * Returns a retry policy builder.
    */
   public retry() {
-    return new RetryPolicy({
-      errorFilter: this.options.errorFilter,
-      resultFilter: this.options.resultFilter,
-    });
+    return new RetryPolicy(
+      {},
+      new ExecuteWrapper(this.options.errorFilter, this.options.resultFilter),
+    );
   }
 
   /**
@@ -366,11 +413,13 @@ export class Policy {
    * breaker again. Defaults to 10 seconds.
    */
   public circuitBreaker(halfOpenAfter: number, breaker: IBreaker) {
-    return new CircuitBreakerPolicy({
-      ...this.options,
-      breaker,
-      halfOpenAfter,
-    });
+    return new CircuitBreakerPolicy(
+      {
+        breaker,
+        halfOpenAfter,
+      },
+      new ExecuteWrapper(this.options.errorFilter, this.options.resultFilter),
+    );
   }
 
   /**
@@ -393,7 +442,7 @@ export class Policy {
    */
   public fallback<R>(valueOrFactory: (() => Promise<R> | R) | R) {
     return new FallbackPolicy(
-      this.options,
+      new ExecuteWrapper(this.options.errorFilter, this.options.resultFilter),
       // not technically type-safe, since if they actually want to _return_
       // a function, that gets lost here. We'll just advice in the docs to
       // use a higher-order function if necessary.
