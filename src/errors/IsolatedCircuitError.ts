@@ -5,6 +5,8 @@ import { BrokenCircuitError } from './BrokenCircuitError';
  * circuit breaker is open.
  */
 export class IsolatedCircuitError extends BrokenCircuitError {
+  public readonly isIsolatedCircuitError = true;
+
   constructor() {
     super(`Execution prevented because the circuit breaker is open`);
   }
