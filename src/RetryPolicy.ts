@@ -94,7 +94,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   /**
    * Uses an exponential backoff for retries.
    */
-  public exponential<S>(options: Partial<IExponentialBackoffOptions<S>>) {
+  public exponential<S>(options: Partial<IExponentialBackoffOptions<S>> = {}) {
     return this.composeBackoff('b', new ExponentialBackoff(options));
   }
 
