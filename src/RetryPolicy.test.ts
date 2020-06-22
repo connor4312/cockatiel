@@ -50,12 +50,7 @@ describe('RetryPolicy', () => {
     afterEach(() => clock.restore());
 
     it('sets the retry delay', async () => {
-      await expect(
-        p
-          .delay(50)
-          .attempts(1)
-          .execute(s),
-      ).to.eventually.be.rejectedWith(MyErrorA);
+      await expect(p.delay(50).attempts(1).execute(s)).to.eventually.be.rejectedWith(MyErrorA);
       expect(delays).to.deep.equal([50]);
       expect(s).to.have.been.calledTwice;
     });
@@ -67,56 +62,34 @@ describe('RetryPolicy', () => {
     });
 
     it('sets the retry attempts', async () => {
-      await expect(
-        p
-          .delay([10, 20, 20])
-          .attempts(1)
-          .execute(s),
-      ).to.eventually.be.rejectedWith(MyErrorA);
+      await expect(p.delay([10, 20, 20]).attempts(1).execute(s)).to.eventually.be.rejectedWith(
+        MyErrorA,
+      );
       expect(delays).to.deep.equal([10]);
       expect(s).to.have.been.calledTwice;
     });
   });
 
   it('retries all errors', async () => {
-    const s = stub()
-      .onFirstCall()
-      .throws(new MyErrorA())
-      .onSecondCall()
-      .returns('ok');
+    const s = stub().onFirstCall().throws(new MyErrorA()).onSecondCall().returns('ok');
 
-    expect(
-      await Policy.handleAll()
-        .retry()
-        .execute(s),
-    ).to.equal('ok');
+    expect(await Policy.handleAll().retry().execute(s)).to.equal('ok');
 
     expect(s).to.have.been.calledTwice;
   });
 
   it('filters error types', async () => {
-    const s = stub()
-      .onFirstCall()
-      .throws(new MyErrorA())
-      .onSecondCall()
-      .throws(new MyErrorB());
+    const s = stub().onFirstCall().throws(new MyErrorA()).onSecondCall().throws(new MyErrorB());
 
     await expect(
-      Policy.handleType(MyErrorA)
-        .retry()
-        .attempts(5)
-        .execute(s),
+      Policy.handleType(MyErrorA).retry().attempts(5).execute(s),
     ).to.eventually.be.rejectedWith(MyErrorB);
 
     expect(s).to.have.been.calledTwice;
   });
 
   it('filters returns', async () => {
-    const s = stub()
-      .onFirstCall()
-      .returns(1)
-      .onSecondCall()
-      .returns(2);
+    const s = stub().onFirstCall().returns(1).onSecondCall().returns(2);
 
     expect(
       await Policy.handleWhenResult(r => typeof r === 'number' && r < 2)
@@ -157,12 +130,9 @@ describe('RetryPolicy', () => {
   it('bubbles errors when retry attempts exceeded', async () => {
     const s = stub().throws(new MyErrorB());
 
-    await expect(
-      Policy.handleAll()
-        .retry()
-        .attempts(5)
-        .execute(s),
-    ).to.eventually.be.rejectedWith(MyErrorB);
+    await expect(Policy.handleAll().retry().attempts(5).execute(s)).to.eventually.be.rejectedWith(
+      MyErrorB,
+    );
 
     expect(s).to.have.callCount(6);
   });

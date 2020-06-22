@@ -276,7 +276,7 @@ export class Policy {
         throw new Error(`Can only decorate functions with @cockatiel, got ${typeof inner}`);
       }
 
-      descriptor.value = function(this: unknown, ...args: any[]) {
+      descriptor.value = function (this: unknown, ...args: any[]) {
         return policy.execute(context => inner.apply(this, [...args, context]));
       };
     };

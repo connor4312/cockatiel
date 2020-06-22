@@ -23,8 +23,5 @@ export async function runInChild(code: string) {
     child.on('exit', resolve);
   });
 
-  return Buffer.concat(output)
-    .toString()
-    .replace(/\r?\n/g, '\n')
-    .trim();
+  return Buffer.concat(output).toString().replace(/\r?\n/g, '\n').trim();
 }

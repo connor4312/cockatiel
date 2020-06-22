@@ -17,10 +17,7 @@ import { database } from './my-db';
 
 // Create a retry policy that'll try whatever function we execute 3
 // times with a randomized exponential backoff.
-const retry = Policy.handleAll()
-  .retry()
-  .attempts(3)
-  .exponential();
+const retry = Policy.handleAll().retry().attempts(3).exponential();
 
 // Create a circuit breaker that'll stop calling the executed function for 10
 // seconds if it fails 5 times in a row. This can give time for e.g. a database
@@ -206,9 +203,7 @@ A decorator that can be used to wrap class methods and apply the given policy to
 ```ts
 import { Policy } from 'cockatiel';
 
-const retry = Policy.handleAll()
-  .retry()
-  .attempts(3);
+const retry = Policy.handleAll().retry().attempts(3);
 
 class Database {
   @Policy.use(retry)
@@ -231,11 +226,7 @@ A no-op policy, which may be useful for tests and stubs.
 ```ts
 import { Policy } from 'cockatiel';
 
-const policy = isProduction
-  ? Policy.handleAll()
-      .retry()
-      .attempts(3)
-  : Policy.noop;
+const policy = isProduction ? Policy.handleAll().retry().attempts(3) : Policy.noop;
 
 export async function handleRequest() {
   return policy.execute(() => getInfoFromDatabase());
@@ -561,9 +552,7 @@ await Policy.handleAll()
 Sets the maximum number of retry attempts.
 
 ```ts
-Policy.handleAll()
-  .retry()
-  .attempts(3);
+Policy.handleAll().retry().attempts(3);
 // ...
 ```
 
@@ -573,16 +562,11 @@ Sets the delay between retries. You can pass a single number, or a list of retry
 
 ```ts
 // retry 5 times, with 100ms between them
-Policy.handleAll()
-  .retry()
-  .attempts(5)
-  .delay(100);
+Policy.handleAll().retry().attempts(5).delay(100);
 // ...
 
 // retry 3 times, increasing delays between them
-Policy.handleAll()
-  .retry()
-  .delay([100, 200, 300]);
+Policy.handleAll().retry().delay([100, 200, 300]);
 // ...
 ```
 
@@ -614,9 +598,7 @@ Policy.handleAll()
 Uses a custom backoff strategy for retries.
 
 ```ts
-Policy.handleAll()
-  .retry()
-  .backoff(myBackoff);
+Policy.handleAll().retry().backoff(myBackoff);
 // ...
 ```
 

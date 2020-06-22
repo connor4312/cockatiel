@@ -19,9 +19,7 @@ const assertNever = (_value: never) => {
 describe('Policy', () => {
   it('wraps', async () => {
     const policy = Policy.wrap(
-      Policy.handleType(MyError1)
-        .retry()
-        .attempts(3),
+      Policy.handleType(MyError1).retry().attempts(3),
       Policy.handleAll().circuitBreaker(100, new ConsecutiveBreaker(2)),
     );
 
@@ -112,11 +110,7 @@ describe('Policy', () => {
 
   it('applies Policy.use', async () => {
     class Calculator {
-      @Policy.use(
-        Policy.handleAll()
-          .retry()
-          .attempts(5),
-      )
+      @Policy.use(Policy.handleAll().retry().attempts(5))
       public double(n: number, context?: IRetryContext) {
         if (context!.attempt < 2) {
           throw new Error('failed');

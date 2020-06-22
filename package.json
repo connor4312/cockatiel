@@ -73,7 +73,7 @@
     "chai-subset": "^1.6.0",
     "mocha": "^6.2.2",
     "nyc": "^14.1.1",
-    "prettier": "^1.19.1",
+    "prettier": "^2.0.0",
     "remark-cli": "^7.0.1",
     "remark-toc": "^7.0.0",
     "remark-validate-links": "^9.0.1",
@@ -87,6 +87,7 @@
   },
   "prettier": {
     "printWidth": 100,
+    "arrowParens": "avoid",
     "singleQuote": true,
     "trailingComma": "all"
   }

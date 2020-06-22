@@ -42,8 +42,8 @@ export class ExecuteWrapper {
 
   public derive() {
     const e = new ExecuteWrapper(this.errorFilter, this.resultFilter);
-    e.onSuccess((evt) => this.successEmitter.emit(evt));
-    e.onFailure((evt) => this.failureEmitter.emit(evt));
+    e.onSuccess(evt => this.successEmitter.emit(evt));
+    e.onFailure(evt => this.failureEmitter.emit(evt));
     return e;
   }
 
