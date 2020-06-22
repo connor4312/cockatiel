@@ -15,9 +15,16 @@ export const returnOrThrow = <R>(failure: FailureOrSuccess<R>) => {
   return failure.value;
 };
 
+declare const performance: { now(): number };
+
 const makeStopwatch = () => {
-  const start = process.hrtime.bigint();
-  return () => Number(process.hrtime.bigint() - start) / 1000000; // ns->ms
+  if (typeof performance !== 'undefined') {
+    const start = performance.now();
+    return () => performance.now() - start;
+  } else {
+    const start = process.hrtime.bigint();
+    return () => Number(process.hrtime.bigint() - start) / 1000000; // ns->ms
+  }
 };
 
 export class ExecuteWrapper {
@@ -35,8 +42,8 @@ export class ExecuteWrapper {
 
   public derive() {
     const e = new ExecuteWrapper(this.errorFilter, this.resultFilter);
-    e.onSuccess(evt => this.successEmitter.emit(evt));
-    e.onFailure(evt => this.failureEmitter.emit(evt));
+    e.onSuccess((evt) => this.successEmitter.emit(evt));
+    e.onFailure((evt) => this.failureEmitter.emit(evt));
     return e;
   }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 - 2020-06-22
+
+- **fix:** cockatiel not working in certain browser builds
+
 ## 1.0.0 - 2020-06-16
 
 - **breaking:** Node versions <10 are no longer supported.
