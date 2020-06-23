@@ -408,7 +408,7 @@ export class Policy {
    * ```
    *
    * @param halfOpenAfter Time after failures to try to open the circuit
-   * breaker again. Defaults to 10 seconds.
+   * breaker again.
    * @param breaker The circuit breaker to use. This package exports
    * ConsecutiveBreaker and SamplingBreakers for you to use.
    */
