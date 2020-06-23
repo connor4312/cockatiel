@@ -136,7 +136,7 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
 
   /**
    * Executes the given function.
-   * @param fn -- Function to run
+   * @param fn Function to run
    * @throws a {@link BrokenCircuitError} if the circuit is open
    * @throws a {@link IsolatedCircuitError} if the circuit is held
    * open via {@link CircuitBreakerPolicy.isolate}

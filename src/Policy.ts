@@ -287,8 +287,8 @@ export class Policy {
   /**
    * Allows the policy to additionally handles errors of the given type.
    *
-   * @param cls -- Class constructor to check that the error is an instance of.
-   * @param predicate -- If provided, a function to be called with the error
+   * @param cls Class constructor to check that the error is an instance of.
+   * @param predicate If provided, a function to be called with the error
    * which should return "true" if we want to handle this error.
    * @example
    * ```js
@@ -313,7 +313,7 @@ export class Policy {
    * Allows the policy to additionally handles errors that pass the given
    * predicate function.
    *
-   * @param predicate -- Takes any thrown error, and returns true if it should
+   * @param predicate Takes any thrown error, and returns true if it should
    * be retried by this policy.
    * @example
    * ```js
@@ -336,7 +336,7 @@ export class Policy {
    * Adds handling for return values. The predicate will be called with
    * the return value of the executed function,
    *
-   * @param predicate -- Takes the returned value, and returns true if it
+   * @param predicate Takes the returned value, and returns true if it
    * should be retried by this policy.
    * @example
    * ```js
@@ -359,7 +359,7 @@ export class Policy {
    * Adds handling for return values. The predicate will be called with
    * the return value of the executed function,
    *
-   * @param predicate -- Takes the returned value, and returns true if it
+   * @param predicate Takes the returned value, and returns true if it
    * should be retried by this policy.
    * @example
    * ```js
@@ -400,17 +400,17 @@ export class Policy {
    * // Break if more than 20% of requests fail in a 30 second time window:
    * const breaker = Policy
    *  .handleAll()
-   *  .circuitBreaker(new SamplingBreaker(0.2, 30 * 1000));
+   *  .circuitBreaker(10_000, new SamplingBreaker(0.2, 30 * 1000));
    *
    * export function handleRequest() {
    *   return breaker.execute(() => getInfoFromDatabase());
    * }
    * ```
    *
-   * @param breaker -- The circuit breaker to use. This package exports
-   * ConsecutiveBreaker and SamplingBreakers for you to use.
-   * @param halfOpenAfter -- Time after failures to try to open the circuit
+   * @param halfOpenAfter Time after failures to try to open the circuit
    * breaker again. Defaults to 10 seconds.
+   * @param breaker The circuit breaker to use. This package exports
+   * ConsecutiveBreaker and SamplingBreakers for you to use.
    */
   public circuitBreaker(halfOpenAfter: number, breaker: IBreaker) {
     return new CircuitBreakerPolicy(
@@ -437,7 +437,7 @@ export class Policy {
    * }
    * ```
    *
-   * @param toValue -- Value to fall back to, or a function that creates the
+   * @param toValue Value to fall back to, or a function that creates the
    * value to return (any may return a promise)
    */
   public fallback<R>(valueOrFactory: (() => Promise<R> | R) | R) {

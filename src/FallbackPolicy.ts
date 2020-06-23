@@ -18,7 +18,7 @@ export class FallbackPolicy<AltReturn> implements IPolicy<void, AltReturn> {
 
   /**
    * Executes the given function.
-   * @param fn -- Function to execute.
+   * @param fn Function to execute.
    * @returns The function result or fallback value.
    */
   public async execute<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T | AltReturn> {

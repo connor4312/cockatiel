@@ -63,7 +63,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
 
   /**
    * Executes the given function.
-   * @param fn -- Function to execute. Takes in a nested cancellation token.
+   * @param fn Function to execute. Takes in a nested cancellation token.
    * @throws a {@link TaskCancelledError} if a timeout occurs
    */
   public async execute<T>(fn: (context: ICancellationContext) => PromiseLike<T> | T): Promise<T> {

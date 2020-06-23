@@ -82,7 +82,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
 
   /**
    * Sets the number of retry attempts for the function.
-   * @param count -- Retry attempts to make
+   * @param count Retry attempts to make
    */
   public attempts(count: number) {
     return this.composeBackoff('a', new ConstantBackoff(1, count));
@@ -132,7 +132,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
 
   /**
    * Executes the given function with retries.
-   * @param fn -- Function to run
+   * @param fn Function to run
    * @returns a Promise that resolves or rejects with the function results.
    */
   public async execute<T>(fn: (context: IRetryContext) => PromiseLike<T> | T): Promise<T> {
