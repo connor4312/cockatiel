@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import { promisify } from 'util';
+import { CancellationTokenSource } from './CancellationToken';
 import { defer } from './common/defer';
 import { runInChild } from './common/util.test';
 import { TaskCancelledError } from './errors/TaskCancelledError';
@@ -62,5 +63,23 @@ describe('TimeoutPolicy', () => {
     `);
 
     expect(output).to.be.empty;
+  });
+
+  it('links parent cancellation token', async () => {
+    const parent = new CancellationTokenSource();
+    await Policy.timeout(1000, TimeoutStrategy.Cooperative).execute((_, ct) => {
+      expect(ct.isCancellationRequested).to.be.false;
+      parent.cancel();
+      expect(ct.isCancellationRequested).to.be.true;
+    }, parent.token);
+  });
+
+  it('still has own timeout if given parent', async () => {
+    const parent = new CancellationTokenSource();
+    await Policy.timeout(1, TimeoutStrategy.Cooperative).execute(async (_, ct) => {
+      expect(ct.isCancellationRequested).to.be.false;
+      await delay(3);
+      expect(ct.isCancellationRequested).to.be.true;
+    }, parent.token);
   });
 });

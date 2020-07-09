@@ -1,7 +1,8 @@
+import { CancellationToken } from './CancellationToken';
 import { ExecuteWrapper } from './common/Executor';
-import { IPolicy } from './Policy';
+import { IDefaultPolicyContext, IPolicy } from './Policy';
 
-export class FallbackPolicy<AltReturn> implements IPolicy<void, AltReturn> {
+export class FallbackPolicy<AltReturn> implements IPolicy<IDefaultPolicyContext, AltReturn> {
   /**
    * @inheritdoc
    */
@@ -21,8 +22,11 @@ export class FallbackPolicy<AltReturn> implements IPolicy<void, AltReturn> {
    * @param fn Function to execute.
    * @returns The function result or fallback value.
    */
-  public async execute<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T | AltReturn> {
-    const result = await this.executor.invoke(fn);
+  public async execute<T>(
+    fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
+    cancellationToken = CancellationToken.None,
+  ): Promise<T | AltReturn> {
+    const result = await this.executor.invoke(fn, { cancellationToken });
     if ('success' in result) {
       return result.success;
     }

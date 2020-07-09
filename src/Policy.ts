@@ -1,5 +1,6 @@
 import { IBreaker } from './breaker/Breaker';
 import { BulkheadPolicy } from './BulkheadPolicy';
+import { CancellationToken } from './CancellationToken';
 import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
 import { Event } from './common/Event';
 import { ExecuteWrapper } from './common/Executor';
@@ -57,11 +58,22 @@ export interface ISuccessEvent {
   duration: number;
 }
 
+export interface IDefaultPolicyContext {
+  /**
+   * Cancellation token for the operation. This is propagated through multiple
+   * retry policies.
+   */
+  cancellationToken: CancellationToken;
+}
+
 /**
  * IPolicy is the type of all policies that Cockatiel provides. It describes
  * an execute() function which takes a generic argument.
  */
-export interface IPolicy<ContextType, AltReturn = never> {
+export interface IPolicy<
+  ContextType extends IDefaultPolicyContext = IDefaultPolicyContext,
+  AltReturn = never
+> {
   /**
    * Fires on the policy when a request successfully completes and some
    * successful value will be returned. In a retry policy, this is fired once
@@ -70,11 +82,18 @@ export interface IPolicy<ContextType, AltReturn = never> {
   readonly onSuccess: Event<ISuccessEvent>;
 
   /**
-   * Fires on the policy when a request successfully fails and will throw a
-   * rejection to the user.
+   * Fires on the policy when a request fails *due to a handled reason* fails
+   * and will give rejection to the called.
    */
   readonly onFailure: Event<IFailureEvent>;
-  execute<T>(fn: (context: ContextType) => PromiseLike<T> | T): Promise<T | AltReturn>;
+
+  /**
+   * Runs the function through behavior specified by the policy.
+   */
+  execute<T>(
+    fn: (context: ContextType) => PromiseLike<T> | T,
+    cancellationToken?: CancellationToken,
+  ): Promise<T | AltReturn>;
 }
 
 type PolicyType<T> = T extends RetryPolicy
@@ -82,9 +101,9 @@ type PolicyType<T> = T extends RetryPolicy
   : T extends TimeoutPolicy
   ? IPolicy<ICancellationContext, never>
   : T extends FallbackPolicy<infer F>
-  ? IPolicy<void, F>
+  ? IPolicy<IRetryContext, F>
   : T extends CircuitBreakerPolicy
-  ? IPolicy<void, never>
+  ? IPolicy<IRetryContext, never>
   : T extends IPolicy<infer ContextType, infer ReturnType>
   ? IPolicy<ContextType, ReturnType>
   : never;
@@ -131,21 +150,21 @@ export class Policy {
   // types well in that scenario (unless p is explicitly typed as an IPolicy
   // and not some implementation) and returns `IPolicy<void, unknown>` and
   // the like. This is the best solution I've found for it.
-  public static wrap<A extends IPolicy<unknown, unknown>>(p1: A): PolicyType<A>;
-  public static wrap<A extends IPolicy<unknown, unknown>, B extends IPolicy<unknown, unknown>>(
-    p1: A,
-    p2: B,
-  ): MergePolicies<PolicyType<A>, PolicyType<B>>;
+  public static wrap<A extends IPolicy<IDefaultPolicyContext, unknown>>(p1: A): PolicyType<A>;
   public static wrap<
-    A extends IPolicy<unknown, unknown>,
-    B extends IPolicy<unknown, unknown>,
-    C extends IPolicy<unknown, unknown>
+    A extends IPolicy<IDefaultPolicyContext, unknown>,
+    B extends IPolicy<IDefaultPolicyContext, unknown>
+  >(p1: A, p2: B): MergePolicies<PolicyType<A>, PolicyType<B>>;
+  public static wrap<
+    A extends IPolicy<IDefaultPolicyContext, unknown>,
+    B extends IPolicy<IDefaultPolicyContext, unknown>,
+    C extends IPolicy<IDefaultPolicyContext, unknown>
   >(p1: A, p2: B, p3: C): MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>;
   public static wrap<
-    A extends IPolicy<unknown, unknown>,
-    B extends IPolicy<unknown, unknown>,
-    C extends IPolicy<unknown, unknown>,
-    D extends IPolicy<unknown, unknown>
+    A extends IPolicy<IDefaultPolicyContext, unknown>,
+    B extends IPolicy<IDefaultPolicyContext, unknown>,
+    C extends IPolicy<IDefaultPolicyContext, unknown>,
+    D extends IPolicy<IDefaultPolicyContext, unknown>
   >(
     p1: A,
     p2: B,
@@ -156,11 +175,11 @@ export class Policy {
     MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
   >;
   public static wrap<
-    A extends IPolicy<unknown, unknown>,
-    B extends IPolicy<unknown, unknown>,
-    C extends IPolicy<unknown, unknown>,
-    D extends IPolicy<unknown, unknown>,
-    E extends IPolicy<unknown, unknown>
+    A extends IPolicy<IDefaultPolicyContext, unknown>,
+    B extends IPolicy<IDefaultPolicyContext, unknown>,
+    C extends IPolicy<IDefaultPolicyContext, unknown>,
+    D extends IPolicy<IDefaultPolicyContext, unknown>,
+    E extends IPolicy<IDefaultPolicyContext, unknown>
   >(
     p1: A,
     p2: B,
@@ -174,15 +193,22 @@ export class Policy {
       MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
     >
   >;
-  public static wrap<C, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A>;
-  public static wrap<C, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A> {
+  public static wrap<C extends IDefaultPolicyContext, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A>;
+  public static wrap<C extends IDefaultPolicyContext, A>(
+    ...p: Array<IPolicy<C, A>>
+  ): IPolicy<C, A> {
     return {
       onFailure: p[0].onFailure,
       onSuccess: p[0].onSuccess,
-      execute<T>(fn: (context: C) => PromiseLike<T> | T): Promise<T | A> {
-        const run = (context: any, i: number): PromiseLike<T | A> | T | A =>
-          i === p.length ? fn(context) : p[i].execute(next => run({ ...context, ...next }, i + 1));
-        return Promise.resolve(run({}, 0));
+      execute<T>(
+        fn: (context: C) => PromiseLike<T> | T,
+        cancellationToken: CancellationToken,
+      ): Promise<T | A> {
+        const run = (context: C, i: number): PromiseLike<T | A> | T | A =>
+          i === p.length
+            ? fn(context)
+            : p[i].execute(next => run({ ...context, ...next }, i + 1), context.cancellationToken);
+        return Promise.resolve(run({ cancellationToken } as C, 0));
       },
     };
   }
@@ -255,7 +281,7 @@ export class Policy {
    *
    * class Database {
    *   @Policy.use(retry)
-   *   public getUserInfo(userId, context) {
+   *   public getUserInfo(userId, context, cancellationToken) {
    *     console.log('Retry attempt number', context.attempt);
    *     // implementation here
    *   }
@@ -268,7 +294,7 @@ export class Policy {
    * Note that it will force the return type to be a Promise, since that's
    * what policies return.
    */
-  public static use(policy: IPolicy<unknown, never>) {
+  public static use(policy: IPolicy<IDefaultPolicyContext, never>) {
     // tslint:disable-next-line: variable-name
     return (_target: unknown, _key: string, descriptor: PropertyDescriptor) => {
       const inner = descriptor.value;
@@ -277,7 +303,8 @@ export class Policy {
       }
 
       descriptor.value = function (this: unknown, ...args: any[]) {
-        return policy.execute(context => inner.apply(this, [...args, context]));
+        const ct = args[args.length - 1] instanceof CancellationToken ? args.pop() : undefined;
+        return policy.execute(context => inner.apply(this, [...args, context]), ct);
       };
     };
   }

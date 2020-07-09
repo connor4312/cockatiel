@@ -1,7 +1,8 @@
 # Changelog
 
-## TBA
+## 1.1.0 - 2020-07-08
 
+- **feat:** add an optional `CancellationToken` to `IPolicy.execute`. Add cancellation awareness to all policies; see their specific documentation for more information. (see [#25](https://github.com/connor4312/cockatiel/issues/25))
 - **docs:** fix outdated docs on `Policy.circuitBreaker` and unnecessary dashes in jsdoc comments (see [#22](https://github.com/connor4312/cockatiel/issues/22), [#23](https://github.com/connor4312/cockatiel/issues/23), [#24](https://github.com/connor4312/cockatiel/issues/24))
 
 ## 1.0.1 - 2020-06-22

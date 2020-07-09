@@ -1,11 +1,14 @@
+import { CancellationToken } from './CancellationToken';
 import { defer } from './common/defer';
 import { EventEmitter } from './common/Event';
 import { ExecuteWrapper } from './common/Executor';
 import { BulkheadRejectedError } from './errors/BulkheadRejectedError';
-import { IPolicy } from './Policy';
+import { TaskCancelledError } from './errors/Errors';
+import { IDefaultPolicyContext, IPolicy } from './Policy';
 
 interface IQueueItem<T> {
-  fn(context: void): Promise<T> | T;
+  ct: CancellationToken;
+  fn(context: IDefaultPolicyContext): Promise<T> | T;
   resolve(value: T): void;
   reject(error: Error): void;
 }
@@ -13,7 +16,7 @@ interface IQueueItem<T> {
 /**
  * Bulkhead limits concurrent requests made.
  */
-export class BulkheadPolicy implements IPolicy<void> {
+export class BulkheadPolicy implements IPolicy {
   private active = 0;
   private readonly queue: Array<IQueueItem<unknown>> = [];
   private readonly onRejectEmitter = new EventEmitter<void>();
@@ -58,11 +61,18 @@ export class BulkheadPolicy implements IPolicy<void> {
    * @param fn Function to execute
    * @throws a {@link BulkheadRejectedException} if the bulkhead limits are exceeeded
    */
-  public async execute<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
+  public async execute<T>(
+    fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
+    cancellationToken = CancellationToken.None,
+  ): Promise<T> {
+    if (cancellationToken.isCancellationRequested) {
+      throw new TaskCancelledError();
+    }
+
     if (this.active < this.capacity) {
       this.active++;
       try {
-        return await fn();
+        return await fn({ cancellationToken });
       } finally {
         this.active--;
         this.dequeue();
@@ -71,7 +81,7 @@ export class BulkheadPolicy implements IPolicy<void> {
 
     if (this.queue.length < this.queueCapacity) {
       const { resolve, reject, promise } = defer<T>();
-      this.queue.push({ fn, resolve, reject });
+      this.queue.push({ ct: cancellationToken, fn, resolve, reject });
       return promise;
     }
 
@@ -86,7 +96,7 @@ export class BulkheadPolicy implements IPolicy<void> {
     }
 
     Promise.resolve()
-      .then(() => this.execute(item.fn))
+      .then(() => this.execute(item.fn, item.ct))
       .then(item.resolve)
       .catch(item.reject);
   }

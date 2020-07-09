@@ -38,6 +38,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
 
 ## Table of Contents
 
+- [`IPolicy` (the shape of a policy)](#ipolicy-the-shape-of-a-policy)
 - [`Policy`](#policy)
   - [`Policy.handleAll()`](#policyhandleall)
   - [`Policy.handleType(ctor[, filter])`](#policyhandletypector-filter)
@@ -68,7 +69,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`Event.toPromise(event[, cancellationToken])`](#eventtopromiseevent-cancellationtoken)
   - [`Event.once(event, callback)`](#eventonceevent-callback)
 - [`Policy.retry()`](#policyretry)
-  - [`retry.execute(fn)`](#retryexecutefn)
+  - [`retry.execute(fn[, cancellationToken])`](#retryexecutefn-cancellationtoken)
   - [`retry.attempts(count)`](#retryattemptscount)
   - [`retry.delay(amount)`](#retrydelayamount)
   - [`retry.exponential(options)`](#retryexponentialoptions)
@@ -82,7 +83,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
 - [`Policy.circuitBreaker(openAfter, breaker)`](#policycircuitbreakeropenafter-breaker)
   - [`ConsecutiveBreaker`](#consecutivebreaker)
   - [`SamplingBreaker`](#samplingbreaker)
-  - [`breaker.execute(fn)`](#breakerexecutefn)
+  - [`breaker.execute(fn[, cancellationToken])`](#breakerexecutefn-cancellationtoken)
   - [`breaker.state`](#breakerstate)
   - [`breaker.onBreak(callback)`](#breakeronbreakcallback)
   - [`breaker.onReset(callback)`](#breakeronresetcallback)
@@ -93,21 +94,58 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`breaker.isolate()`](#breakerisolate)
 - [`Policy.timeout(duration, strategy)`](#policytimeoutduration-strategy)
   - [`timeout.dangerouslyUnref()`](#timeoutdangerouslyunref)
-  - [`timeout.execute(fn)`](#timeoutexecutefn)
+  - [`timeout.execute(fn[, cancellationToken])`](#timeoutexecutefn-cancellationtoken)
   - [`timeout.onTimeout(callback)`](#timeoutontimeoutcallback)
   - [`timeout.onSuccess(callback)`](#timeoutonsuccesscallback)
   - [`timeout.onFailure(callback)`](#timeoutonfailurecallback)
 - [`Policy.bulkhead(limit[, queue])`](#policybulkheadlimit-queue)
-  - [`bulkhead.execute(fn)`](#bulkheadexecutefn)
+  - [`bulkhead.execute(fn[, cancellationToken])`](#bulkheadexecutefn-cancellationtoken)
   - [`bulkhead.onReject(callback)`](#bulkheadonrejectcallback)
   - [`bulkhead.onSuccess(callback)`](#bulkheadonsuccesscallback)
   - [`bulkhead.onFailure(callback)`](#bulkheadonfailurecallback)
   - [`bulkhead.executionSlots`](#bulkheadexecutionslots)
   - [`bulkhead.queueSlots`](#bulkheadqueueslots)
 - [`Policy.fallback(valueOrFactory)`](#policyfallbackvalueorfactory)
-  - [`fallback.execute(fn)`](#fallbackexecutefn)
+  - [`fallback.execute(fn[, cancellationToken])`](#fallbackexecutefn-cancellationtoken)
   - [`fallback.onSuccess(callback)`](#fallbackonsuccesscallback)
   - [`fallback.onFailure(callback)`](#fallbackonfailurecallback)
+
+## `IPolicy` (the shape of a policy)
+
+All Cockatiel fault handling policies (fallbacks, circuit breakers, bulkheads, timeouts, retries) adhere to the same interface. In TypeScript, this is given as:
+
+```ts
+export interface IPolicy<ContextType extends { cancellationToken: CancellationToken }> {
+  /**
+   * Fires on the policy when a request successfully completes and some
+   * successful value will be returned. In a retry policy, this is fired once
+   * even if the request took multiple retries to succeed.
+   */
+  readonly onSuccess: Event<ISuccessEvent>;
+
+  /**
+   * Fires on the policy when a request fails *due to a handled reason* fails
+   * and will give rejection to the called.
+   */
+  readonly onFailure: Event<IFailureEvent>;
+
+  /**
+   * Runs the function through behavior specified by the policy.
+   */
+  execute<T>(
+    fn: (context: ContextType) => PromiseLike<T> | T,
+    cancellationToken?: CancellationToken,
+  ): Promise<T>;
+}
+```
+
+If you don't read TypeScript often, here's what it means:
+
+- There are two [events](#events), `onSuccess`/`onFailure`, that are called when a call succeeds or fails. Note that `onFailure` _only_ is called if a handled error is thrown.
+
+  As a design decision, Cockatiel won't assume all thrown errors are actually failures unless you tell us. For example, in your application you might have errors thrown if the user submits invalid input, and triggering fault handling behavior for this reason would not be desirable!
+
+- There's an `execute` function that you can use to "wrap" your own function. Anything you return from that function is returned, in a promise, from `execute`. You can optionally pass a cancellation token to the `execute()` function, and the function will always be called with an object _at least_ containing a cancellation token (some policies might add extra metadata for you).
 
 ## `Policy`
 
@@ -175,7 +213,7 @@ Wraps the given set of policies into a single policy. For instance, this:
 
 ```js
 const result = await retry.execute(() =>
-  breaker.execute(() => timeout.execute(({ cancellation }) => getData(cancellation))),
+  breaker.execute(() => timeout.execute(({ cancellationToken }) => getData(cancellationToken))),
 );
 ```
 
@@ -184,7 +222,7 @@ Is the equivalent to:
 ```js
 const result = await Policy
   .wrap(retry, breaker, timeout)
-  .execute(({ cancellation }) => getData(cancellation)));
+  .execute(({ cancellationToken }) => getData(cancellationToken)));
 ```
 
 The `context` argument passed to the executed function is the merged object of all previous policies. So for instance, in the above example you'll get the cancellation token from the [TimeoutPolicy](#policytimeoutduration-strategy) as well as the attempt number from the [RetryPolicy](#policyretry):
@@ -535,11 +573,11 @@ const response1 = await Policy.handleType(NetworkError) // only catch network er
   .execute(() => getJson('https://example.com'));
 ```
 
-### `retry.execute(fn)`
+### `retry.execute(fn[, cancellationToken])`
 
-Executes the function. The current retry context, containing the current `{ attempt: number }`. The function should throw, return a promise, or return a value, which get handled as configured in the Policy.
+Executes the function. The current retry context, containing the attempts and cancellation token, `{ attempt: number, cancellationToken: CancellationToken }`, is passed as the function's first argument. The function should throw, return a promise, or return a value, which get handled as configured in the Policy.
 
-If the function doesn't succeed before the backoff ceases, the last error thrown will be bubbled up, or the last result will be returned (if you used any of the `Policy.handleResult*` methods).
+If the function doesn't succeed before the backoff ceases or cancellation is requested, the last error thrown will be bubbled up, or the last result will be returned (if you used any of the `Policy.handleResult*` methods).
 
 ```ts
 await Policy.handleAll()
@@ -738,9 +776,13 @@ const breaker = Policy.handleAll().circuitBreaker(
 );
 ```
 
-### `breaker.execute(fn)`
+### `breaker.execute(fn[, cancellationToken])`
 
-Executes the function. May throw a `BrokenCircuitError` if the circuit is open. Otherwise, it calls the inner function and returns what it returns, or throws what it throws.
+Executes the function. May throw a `BrokenCircuitError` if the circuit is open. If a half-open test is currently running and it succeeds, the circuit breaker will check the cancellation token (possibly throwing a `TaskCancelledError`) before continuing to run the inner function.
+
+Otherwise, it calls the inner function and returns what it returns, or throws what it throws.
+
+Like all `Policy.execute` methods, any propagated `{ cancellationToken: CancellationToken }` will be given as the first argument to `fn`.
 
 ```ts
 const response = await breaker.execute(() => getJson('https://example.com'));
@@ -875,12 +917,12 @@ export async function handleRequest() {
 
 When timing out, a referenced timer is created. This means the Node.js event loop is kept active while we're waiting for the timeout, as long as the function hasn't returned. Calling this method on the timeout builder will unreference the timer, allowing the process to exit even if a timeout might still be happening.
 
-### `timeout.execute(fn)`
+### `timeout.execute(fn[, cancellationToken])`
 
-Executes the given function as configured in the policy. A [CancellationToken](#cancellationtoken) will be pass to the function, which it should use for aborting operations as needed.
+Executes the given function as configured in the policy. A [CancellationToken](#cancellationtoken) will be pass to the function, which it should use for aborting operations as needed. If cancellation is requested on the parent cancellation token provided as the second argument to `execute()`, the cancellation will be propagated.
 
 ```ts
-await timeout.execute(cancellationToken => getInfoFromDatabase(cancellationToken));
+await timeout.execute(({ cancellationToken }) => getInfoFromDatabase(cancellationToken));
 ```
 
 ### `timeout.onTimeout(callback)`
@@ -952,7 +994,7 @@ You can optionally pass a second parameter to `bulkhead()`, which will allow for
 const bulkhead = Policy.bulkhead(12, 4); // limit to 12 concurrent calls, with 4 queued up
 ```
 
-### `bulkhead.execute(fn)`
+### `bulkhead.execute(fn[, cancellationToken])`
 
 Depending on the bulkhead state, either:
 
@@ -960,8 +1002,14 @@ Depending on the bulkhead state, either:
 - Queues the function for execution and returns its results when it runs, or;
 - Throws a `BulkheadRejectedError` if the configured concurrency and queue limits have been execeeded.
 
+The cancellation token is checked (possibly resulting in a TaskCancelledError) when the function is first submitted to the bulkhead, and when it dequeues.
+
+Like all `Policy.execute` methods, any propagated `{ cancellationToken: CancellationToken }` will be given as the first argument to `fn`.
+
 ```js
-const data = await bulkhead.execute(() => getInfoFromDatabase());
+const data = await bulkhead.execute(({ cancellationToken }) =>
+  getInfoFromDatabase(cancellationToken),
+);
 ```
 
 ### `bulkhead.onReject(callback)`
@@ -1026,9 +1074,11 @@ export function handleRequest() {
 }
 ```
 
-### `fallback.execute(fn)`
+### `fallback.execute(fn[, cancellationToken])`
 
 Executes the given function. Any _handled_ error or errorful value will be eaten, and instead the fallback value will be returned.
+
+Like all `Policy.execute` methods, any propagated `{ cancellationToken: CancellationToken }` will be given as the first argument to `fn`.
 
 ```js
 const result = await fallback.execute(() => getInfoFromDatabase());

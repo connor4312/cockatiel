@@ -18,7 +18,11 @@ export enum TimeoutStrategy {
 }
 
 export interface ICancellationContext {
+  /**
+   * @deprecated use `cancellationToken` instead
+   */
   cancellation: CancellationToken;
+  cancellationToken: CancellationToken;
 }
 
 export class TimeoutPolicy implements IPolicy<ICancellationContext> {
@@ -66,20 +70,25 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
    * @param fn Function to execute. Takes in a nested cancellation token.
    * @throws a {@link TaskCancelledError} if a timeout occurs
    */
-  public async execute<T>(fn: (context: ICancellationContext) => PromiseLike<T> | T): Promise<T> {
-    const cts = new CancellationTokenSource();
+  public async execute<T>(
+    fn: (context: ICancellationContext, ct: CancellationToken) => PromiseLike<T> | T,
+    ct = CancellationToken.None,
+  ): Promise<T> {
+    const cts = new CancellationTokenSource(ct);
     const timer = setTimeout(() => cts.cancel(), this.duration);
     if (this.unref) {
       timer.unref();
     }
 
+    const context = { cancellation: cts.token, cancellationToken: cts.token };
+
     try {
       if (this.strategy === TimeoutStrategy.Cooperative) {
-        return returnOrThrow(await this.executor.invoke(fn, { cancellation: cts.token }));
+        return returnOrThrow(await this.executor.invoke(fn, context, cts.token));
       }
 
       return await Promise.race<T>([
-        this.executor.invoke(fn, { cancellation: cts.token }).then(returnOrThrow),
+        this.executor.invoke(fn, context, cts.token).then(returnOrThrow),
         cts.token.cancellation(cts.token).then(() => {
           this.timeoutEmitter.emit();
           throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);

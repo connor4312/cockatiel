@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { stub } from 'sinon';
 import { ConsecutiveBreaker } from './breaker/Breaker';
-import { CancellationToken } from './CancellationToken';
+import { CancellationToken, CancellationTokenSource } from './CancellationToken';
 import { BrokenCircuitError } from './errors/Errors';
 import { Policy } from './Policy';
 import { IRetryContext } from './RetryPolicy';
@@ -111,19 +111,40 @@ describe('Policy', () => {
   it('applies Policy.use', async () => {
     class Calculator {
       @Policy.use(Policy.handleAll().retry().attempts(5))
-      public double(n: number, context?: IRetryContext) {
+      public double(n: number, context: IRetryContext) {
         if (context!.attempt < 2) {
           throw new Error('failed');
         }
 
-        return { n: n * 2, ...context };
+        return { n: n * 2, ...context! };
       }
     }
 
     const c = new Calculator();
-    expect(await c.double(2)).to.deep.equal({
+    // @ts-ignore
+    const r = await c.double(2);
+    expect(r).to.deep.equal({
       n: 4,
+      cancellationToken: r.cancellationToken,
       attempt: 2,
     });
+  });
+
+  it('uses cancellation token in Policy.use', async () => {
+    class Calculator {
+      @Policy.use(Policy.handleAll().retry().attempts(5))
+      public double(n: number, context: IRetryContext) {
+        expect(n).to.equal(2);
+        expect(context.cancellationToken.isCancellationRequested).to.be.false;
+        cts.cancel();
+        expect(context.cancellationToken.isCancellationRequested).to.be.true;
+        return n * 2;
+      }
+    }
+
+    const cts = new CancellationTokenSource();
+    const c = new Calculator();
+    // @ts-ignore
+    expect(await c.double(2, cts.token)).to.equal(4);
   });
 });

@@ -1,6 +1,7 @@
 import { expect, use } from 'chai';
 import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
 import { noJitterGenerator } from './backoff/Backoff';
+import { CancellationTokenSource } from './CancellationToken';
 import { runInChild } from './common/util.test';
 import { Policy } from './Policy';
 import { RetryPolicy } from './RetryPolicy';
@@ -166,5 +167,24 @@ describe('RetryPolicy', () => {
     `);
 
     expect(output).to.equal('attempt');
+  });
+
+  it('stops retries if cancellation is requested', async () => {
+    const parent = new CancellationTokenSource();
+    const err = new Error();
+    let calls = 0;
+    await expect(
+      Policy.handleAll()
+        .retry()
+        .attempts(3)
+        .execute(({ cancellationToken: cancellation }) => {
+          calls++;
+          expect(cancellation.isCancellationRequested).to.be.false;
+          parent.cancel();
+          expect(cancellation.isCancellationRequested).to.be.true;
+          throw err;
+        }, parent.token),
+    ).to.eventually.be.rejectedWith(err);
+    expect(calls).to.equal(1);
   });
 });

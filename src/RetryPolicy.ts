@@ -3,9 +3,10 @@ import { CompositeBackoff, CompositeBias } from './backoff/CompositeBackoff';
 import { ConstantBackoff } from './backoff/ConstantBackoff';
 import { DelegateBackoff, DelegateBackoffFn } from './backoff/DelegateBackoff';
 import { IterableBackoff } from './backoff/IterableBackoff';
+import { CancellationToken } from './CancellationToken';
 import { EventEmitter } from './common/Event';
 import { ExecuteWrapper } from './common/Executor';
-import { FailureReason, IPolicy } from './Policy';
+import { FailureReason, IDefaultPolicyContext, IPolicy } from './Policy';
 
 const delay = (duration: number, unref: boolean) =>
   new Promise(resolve => {
@@ -18,7 +19,7 @@ const delay = (duration: number, unref: boolean) =>
 /**
  * Context passed into the execute method of the builder.
  */
-export interface IRetryContext {
+export interface IRetryContext extends IDefaultPolicyContext {
   /**
    * The retry attempt, starting at 1 for calls into backoffs.
    */
@@ -135,23 +136,26 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
    * @param fn Function to run
    * @returns a Promise that resolves or rejects with the function results.
    */
-  public async execute<T>(fn: (context: IRetryContext) => PromiseLike<T> | T): Promise<T> {
+  public async execute<T>(
+    fn: (context: IRetryContext) => PromiseLike<T> | T,
+    cancellationToken = CancellationToken.None,
+  ): Promise<T> {
     let backoff: IBackoff<IRetryBackoffContext<unknown>> | undefined =
       this.options.backoff || new ConstantBackoff(0, 1);
     for (let retries = 0; ; retries++) {
-      const result = await this.executor.invoke(fn, { attempt: retries });
+      const result = await this.executor.invoke(fn, { attempt: retries, cancellationToken });
       if ('success' in result) {
         return result.success;
       }
 
-      if (backoff) {
+      if (backoff && !cancellationToken.isCancellationRequested) {
         const delayDuration = backoff.duration();
         const delayPromise = delay(delayDuration, !!this.options.unref);
         // A little sneaky reordering here lets us use Sinon's fake timers
         // when we get an emission in our tests.
         this.onRetryEmitter.emit({ ...result, delay: delayDuration });
         await delayPromise;
-        backoff = backoff.next({ attempt: retries + 1, result });
+        backoff = backoff.next({ attempt: retries + 1, cancellationToken, result });
         continue;
       }
 

@@ -1,10 +1,11 @@
+import { CancellationToken } from './CancellationToken';
 import { ExecuteWrapper, returnOrThrow } from './common/Executor';
-import { IPolicy } from './Policy';
+import { IDefaultPolicyContext, IPolicy } from './Policy';
 
 /**
  * A no-op policy, useful for unit tests and stubs.
  */
-export class NoopPolicy implements IPolicy<void> {
+export class NoopPolicy implements IPolicy {
   private readonly executor = new ExecuteWrapper();
 
   // tslint:disable-next-line: member-ordering
@@ -13,7 +14,10 @@ export class NoopPolicy implements IPolicy<void> {
   // tslint:disable-next-line: member-ordering
   public readonly onFailure = this.executor.onFailure;
 
-  public async execute<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
-    return returnOrThrow(await this.executor.invoke(fn));
+  public async execute<T>(
+    fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
+    cancellationToken = CancellationToken.None,
+  ): Promise<T> {
+    return returnOrThrow(await this.executor.invoke(fn, { cancellationToken }));
   }
 }

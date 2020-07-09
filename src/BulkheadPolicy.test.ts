@@ -1,7 +1,9 @@
 import { expect } from 'chai';
 import { promisify } from 'util';
+import { CancellationToken, CancellationTokenSource } from './CancellationToken';
 import { defer } from './common/defer';
 import { BulkheadRejectedError } from './errors/BulkheadRejectedError';
+import { TaskCancelledError } from './errors/Errors';
 import { Policy } from './Policy';
 
 const delay = promisify(setTimeout);
@@ -116,5 +118,43 @@ describe('Bulkhead', () => {
     await out4;
     expect(b.executionSlots).to.equal(2);
     expect(b.queueSlots).to.equal(2);
+  });
+
+  it('links parent cancellation token', async () => {
+    const bulkhead = Policy.bulkhead(1, Infinity);
+    const todo: Array<PromiseLike<void>> = [];
+    for (let i = 0; i < 3; i++) {
+      const parent = new CancellationTokenSource();
+      todo.push(
+        bulkhead.execute(async ({ cancellationToken }) => {
+          await delay(1);
+          expect(cancellationToken.isCancellationRequested).to.be.false;
+          parent.cancel();
+          expect(cancellationToken.isCancellationRequested).to.be.true;
+        }, parent.token),
+      );
+    }
+
+    // initially cancelled
+    todo.push(
+      expect(
+        bulkhead.execute(() => {
+          throw new Error('expected not to call');
+        }, CancellationToken.Cancelled),
+      ).to.be.rejectedWith(TaskCancelledError),
+    );
+
+    // cancelled by the time it gets executed
+    const cancelledCts = new CancellationTokenSource();
+    setTimeout(() => cancelledCts.cancel(), 2);
+    todo.push(
+      expect(
+        bulkhead.execute(() => {
+          throw new Error('expected not to call');
+        }, cancelledCts.token),
+      ).to.be.rejectedWith(TaskCancelledError),
+    );
+
+    await Promise.all(todo);
   });
 });

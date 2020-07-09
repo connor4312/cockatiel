@@ -1,9 +1,10 @@
 import { IBreaker } from './breaker/Breaker';
+import { CancellationToken } from './CancellationToken';
 import { EventEmitter } from './common/Event';
 import { ExecuteWrapper, returnOrThrow } from './common/Executor';
-import { BrokenCircuitError } from './errors/Errors';
+import { BrokenCircuitError, TaskCancelledError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
-import { FailureReason, IPolicy } from './Policy';
+import { FailureReason, IDefaultPolicyContext, IPolicy } from './Policy';
 
 export enum CircuitState {
   /**
@@ -40,7 +41,7 @@ type InnerState =
   | { value: CircuitState.Open; openedAt: number }
   | { value: CircuitState.HalfOpen; test: Promise<any> };
 
-export class CircuitBreakerPolicy implements IPolicy<void> {
+export class CircuitBreakerPolicy implements IPolicy {
   private readonly breakEmitter = new EventEmitter<FailureReason<unknown> | { isolated: true }>();
   private readonly resetEmitter = new EventEmitter<void>();
   private readonly halfOpenEmitter = new EventEmitter<void>();
@@ -142,11 +143,14 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
    * open via {@link CircuitBreakerPolicy.isolate}
    * @returns a Promise that resolves or rejects with the function results.
    */
-  public async execute<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
+  public async execute<T>(
+    fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
+    cancellationToken = CancellationToken.None,
+  ): Promise<T> {
     const state = this.innerState;
     switch (state.value) {
       case CircuitState.Closed:
-        const result = await this.executor.invoke(fn);
+        const result = await this.executor.invoke(fn, { cancellationToken });
         if ('success' in result) {
           this.options.breaker.success(state.value);
         } else {
@@ -160,13 +164,17 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
 
       case CircuitState.HalfOpen:
         await state.test.catch(() => undefined);
+        if (this.state === CircuitState.Closed && cancellationToken.isCancellationRequested) {
+          throw new TaskCancelledError();
+        }
+
         return this.execute(fn);
 
       case CircuitState.Open:
         if (Date.now() - state.openedAt < this.options.halfOpenAfter) {
           throw new BrokenCircuitError();
         }
-        const test = this.halfOpen(fn);
+        const test = this.halfOpen(fn, cancellationToken);
         this.innerState = { value: CircuitState.HalfOpen, test };
         this.stateChangeEmitter.emit(CircuitState.HalfOpen);
         return test;
@@ -179,11 +187,14 @@ export class CircuitBreakerPolicy implements IPolicy<void> {
     }
   }
 
-  private async halfOpen<T>(fn: (context: void) => PromiseLike<T> | T): Promise<T> {
+  private async halfOpen<T>(
+    fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
+    cancellationToken: CancellationToken,
+  ): Promise<T> {
     this.halfOpenEmitter.emit();
 
     try {
-      const result = await this.executor.invoke(fn);
+      const result = await this.executor.invoke(fn, { cancellationToken });
       if ('success' in result) {
         this.options.breaker.success(CircuitState.HalfOpen);
         this.close();
