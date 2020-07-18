@@ -56,14 +56,14 @@ export namespace Event {
     }
 
     return new Promise((resolve, reject) => {
-      const d1 = once(cancellation.onCancellationRequested, () => {
-        d2.dispose();
-        reject(new TaskCancelledError());
-      });
-
       const d2 = once(event, data => {
         d1.dispose();
         resolve(data);
+      });
+
+      const d1 = once(cancellation.onCancellationRequested, () => {
+        d2.dispose();
+        reject(new TaskCancelledError());
       });
     });
   };

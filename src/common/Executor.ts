@@ -37,7 +37,7 @@ export class ExecuteWrapper {
 
   constructor(
     private readonly errorFilter: (error: Error) => boolean = () => false,
-    private readonly resultFilter: (result: unknown) => boolean = () => true,
+    private readonly resultFilter: (result: unknown) => boolean = () => false,
   ) {}
 
   public derive() {

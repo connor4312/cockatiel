@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 - 2020-07-17
+
+- **fix:** events on the timeout policy being emitted incorrectly, or not emitted (see [#27](https://github.com/connor4312/cockatiel/issues/27))
+
 ## 1.1.0 - 2020-07-08
 
 - **feat:** add an optional `CancellationToken` to `IPolicy.execute`. Add cancellation awareness to all policies; see their specific documentation for more information. (see [#25](https://github.com/connor4312/cockatiel/issues/25))

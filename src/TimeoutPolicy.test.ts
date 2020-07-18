@@ -1,11 +1,11 @@
 import { expect } from 'chai';
+import { SinonStub, stub } from 'sinon';
 import { promisify } from 'util';
 import { CancellationTokenSource } from './CancellationToken';
-import { defer } from './common/defer';
 import { runInChild } from './common/util.test';
 import { TaskCancelledError } from './errors/TaskCancelledError';
 import { Policy } from './Policy';
-import { TimeoutStrategy } from './TimeoutPolicy';
+import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
 const delay = promisify(setTimeout);
 
@@ -29,19 +29,20 @@ describe('TimeoutPolicy', () => {
 
   it('properly aggressively cancels', async () => {
     const policy = Policy.timeout(5, TimeoutStrategy.Aggressive);
-    const verified = defer();
+    let verified: Promise<void>;
     await expect(
-      policy.execute(async ({ cancellation }) => {
-        await delay(0);
-        expect(cancellation.isCancellationRequested).to.be.false;
-        await delay(5);
-        expect(cancellation.isCancellationRequested).to.be.true;
-        verified.resolve(undefined);
-        return 42;
-      }),
+      policy.execute(
+        async ({ cancellation }) =>
+          (verified = (async () => {
+            await delay(0);
+            expect(cancellation.isCancellationRequested).to.be.false;
+            await delay(5);
+            expect(cancellation.isCancellationRequested).to.be.true;
+          })()),
+      ),
     ).to.eventually.be.rejectedWith(TaskCancelledError);
 
-    await verified.promise;
+    await verified!;
   });
 
   it('does not unref by default', async () => {
@@ -51,7 +52,7 @@ describe('TimeoutPolicy', () => {
         .execute(() => new Promise(() => {}));
     `);
 
-    expect(output).to.contain('Operation cancelled');
+    expect(output).to.contain('Operation timed out');
   });
 
   it('unrefs as requested', async () => {
@@ -81,5 +82,83 @@ describe('TimeoutPolicy', () => {
       await delay(3);
       expect(ct.isCancellationRequested).to.be.true;
     }, parent.token);
+  });
+
+  describe('events', () => {
+    let onSuccess: SinonStub;
+    let onFailure: SinonStub;
+    let onTimeout: SinonStub;
+    let agg: TimeoutPolicy;
+    let coop: TimeoutPolicy;
+
+    beforeEach(() => {
+      onSuccess = stub();
+      onFailure = stub();
+      onTimeout = stub();
+      coop = Policy.timeout(2, TimeoutStrategy.Cooperative);
+      agg = Policy.timeout(2, TimeoutStrategy.Aggressive);
+      for (const p of [coop, agg]) {
+        p.onFailure(onFailure);
+        p.onSuccess(onSuccess);
+        p.onTimeout(onTimeout);
+      }
+    });
+
+    it('emits a success event (cooperative)', async () => {
+      await coop.execute(() => 42);
+      await delay(3);
+      expect(onSuccess).to.have.been.called;
+      expect(onFailure).to.not.have.been.called;
+      expect(onTimeout).to.not.have.been.called;
+    });
+
+    it('emits a success event (aggressive)', async () => {
+      await agg.execute(() => 42);
+      await delay(3);
+      expect(onSuccess).to.have.been.called;
+      expect(onFailure).to.not.have.been.called;
+      expect(onTimeout).to.not.have.been.called;
+    });
+
+    it('emits a timeout event (cooperative)', async () => {
+      coop.onTimeout(onTimeout);
+      await coop.execute(() => delay(3));
+      expect(onSuccess).to.have.been.called; // still returned a good value
+      expect(onTimeout).to.have.been.called;
+      expect(onFailure).to.not.have.been.called;
+    });
+
+    it('emits a timeout event (aggressive)', async () => {
+      await expect(agg.execute(() => delay(3))).to.be.rejectedWith(TaskCancelledError);
+      expect(onSuccess).to.not.have.been.called;
+      expect(onTimeout).to.have.been.called;
+      expect(onFailure).to.have.been.called;
+    });
+
+    it('emits a failure event (cooperative)', async () => {
+      await expect(
+        coop.execute(() => {
+          throw new Error('oh no!');
+        }),
+      ).to.be.rejected;
+      await delay(3);
+
+      expect(onSuccess).to.not.have.been.called;
+      expect(onTimeout).to.not.have.been.called;
+      expect(onFailure).to.have.been.called;
+    });
+
+    it('emits a failure event (aggressive)', async () => {
+      await expect(
+        agg.execute(() => {
+          throw new Error('oh no!');
+        }),
+      ).to.be.rejected;
+      await delay(3);
+
+      expect(onSuccess).to.not.have.been.called;
+      expect(onTimeout).to.not.have.been.called;
+      expect(onFailure).to.have.been.called;
+    });
   });
 });

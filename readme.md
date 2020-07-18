@@ -929,6 +929,8 @@ await timeout.execute(({ cancellationToken }) => getInfoFromDatabase(cancellatio
 
 An [event emitter](#events) that fires when a timeout is reached. Useful for telemetry. Returns a disposable instance.
 
+In the "aggressive" timeout strategy, a timeout event will immediately preceed a failure event and promise rejection. In the cooperative timeout strategy, the timeout event is still emitted, _but_ the success or failure is determined by what the executed function throws or returns.
+
 ```ts
 const listener = timeout.onTimeout(() => console.log('timeout was reached'));
 

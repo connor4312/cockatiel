@@ -82,19 +82,25 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
 
     const context = { cancellation: cts.token, cancellationToken: cts.token };
 
+    const onCancelledListener = cts.token.onCancellationRequested(() => this.timeoutEmitter.emit());
+
     try {
       if (this.strategy === TimeoutStrategy.Cooperative) {
         return returnOrThrow(await this.executor.invoke(fn, context, cts.token));
       }
 
-      return await Promise.race<T>([
-        this.executor.invoke(fn, context, cts.token).then(returnOrThrow),
-        cts.token.cancellation(cts.token).then(() => {
-          this.timeoutEmitter.emit();
-          throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);
-        }),
-      ]);
+      return await this.executor
+        .invoke(async () =>
+          Promise.race<T>([
+            Promise.resolve(fn(context, cts.token)),
+            cts.token.cancellation(cts.token).then(() => {
+              throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);
+            }),
+          ]),
+        )
+        .then(returnOrThrow);
     } finally {
+      onCancelledListener.dispose();
       cts.cancel();
       clearTimeout(timer);
     }
