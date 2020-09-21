@@ -12,6 +12,7 @@ export type DelegateBackoffFn<T, S = void> = (
  */
 export class DelegateBackoff<T, S = void> implements IBackoff<T> {
   private current: number = 0;
+  private attempts: number = -1;
 
   constructor(private readonly fn: DelegateBackoffFn<T, S>, private readonly state?: S) {}
 
@@ -19,6 +20,9 @@ export class DelegateBackoff<T, S = void> implements IBackoff<T> {
    * @inheritdoc
    */
   public duration() {
+    if (this.attempts === -1) {
+      throw new Error(`duration is avaiable until the first next call`);
+    }
     return this.current;
   }
 
@@ -39,6 +43,7 @@ export class DelegateBackoff<T, S = void> implements IBackoff<T> {
       b = new DelegateBackoff(this.fn, result.state);
       b.current = result.delay;
     }
+    b.attempts = this.attempts + 1;
 
     return b;
   }

@@ -51,7 +51,7 @@ const defaultOptions: IExponentialBackoffOptions<any> = {
 export class ExponentialBackoff<S> implements IBackoff<void> {
   private options: IExponentialBackoffOptions<S>;
   private state?: S;
-  private attempt = 0;
+  private attempt = -1;
   private delay = 0;
 
   constructor(options?: Partial<IExponentialBackoffOptions<S>>) {
@@ -62,6 +62,9 @@ export class ExponentialBackoff<S> implements IBackoff<void> {
    * @inheritdoc
    */
   public duration() {
+    if (this.attempt === -1) {
+      throw Error(`duration is avaiable until the first next call`);
+    }
     return this.delay;
   }
 

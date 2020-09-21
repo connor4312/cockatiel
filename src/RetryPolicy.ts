@@ -147,7 +147,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
       if ('success' in result) {
         return result.success;
       }
-
+      backoff = backoff?.next({ attempt: retries + 1, cancellationToken, result });
       if (backoff && !cancellationToken.isCancellationRequested) {
         const delayDuration = backoff.duration();
         const delayPromise = delay(delayDuration, !!this.options.unref);
@@ -155,7 +155,6 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
         // when we get an emission in our tests.
         this.onRetryEmitter.emit({ ...result, delay: delayDuration });
         await delayPromise;
-        backoff = backoff.next({ attempt: retries + 1, cancellationToken, result });
         continue;
       }
 

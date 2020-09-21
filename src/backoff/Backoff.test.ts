@@ -14,8 +14,8 @@ export const expectDurations = <T>(
       continue;
     }
 
-    actual.push(backoff.duration());
     backoff = backoff.next(context as T);
+    actual.push(backoff?.duration());
   }
 
   expect(actual).to.deep.equal(expected);

@@ -19,6 +19,6 @@ describe('DelegateBackoff', () => {
       return { delay: n, state: n };
     });
 
-    expectDurations(b, [0, 9, 81, 6561]);
+    expectDurations(b, [9, 81, 6561, 43046721]);
   });
 });

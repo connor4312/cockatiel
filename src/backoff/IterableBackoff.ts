@@ -6,19 +6,16 @@ import { IBackoff } from './Backoff';
 export class IterableBackoff implements IBackoff<void> {
   constructor(
     private readonly durations: ReadonlyArray<number>,
-    private readonly index: number = 0,
-  ) {
-    if (index >= durations.length) {
-      throw new RangeError(
-        `IterableBackoff index ${0} >= number of durations (${durations.length})`,
-      );
-    }
-  }
+    private readonly index: number = -1,
+  ) {}
 
   /**
    * @inheritdoc
    */
   public duration() {
+    if (this.index === -1) {
+      throw new Error(`duration is avaiable until the first next call`);
+    }
     return this.durations[this.index];
   }
 
