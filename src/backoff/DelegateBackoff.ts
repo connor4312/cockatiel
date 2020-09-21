@@ -21,7 +21,7 @@ export class DelegateBackoff<T, S = void> implements IBackoff<T> {
    */
   public duration() {
     if (this.attempts === -1) {
-      throw new Error(`duration is avaiable until the first next call`);
+      throw new Error('duration is avaiable until the first next call');
     }
     return this.current;
   }

@@ -63,7 +63,7 @@ export class ExponentialBackoff<S> implements IBackoff<void> {
    */
   public duration() {
     if (this.attempt === -1) {
-      throw Error(`duration is avaiable until the first next call`);
+      throw new Error('duration is avaiable until the first next call');
     }
     return this.delay;
   }

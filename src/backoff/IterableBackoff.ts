@@ -14,7 +14,7 @@ export class IterableBackoff implements IBackoff<void> {
    */
   public duration() {
     if (this.index === -1) {
-      throw new Error(`duration is avaiable until the first next call`);
+      throw new Error('duration is avaiable until the first next call');
     }
     return this.durations[this.index];
   }
