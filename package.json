@@ -12,7 +12,7 @@
     "prepublishOnly": "npm run compile",
     "test": "rimraf dist && tsc && npm run test:unit && npm run test:lint && npm run test:fmt && npm run test:md",
     "test:cover": "rimraf dist && tsc && nyc npm run test:unit",
-    "test:unit": "mocha --opts mocha.opts",
+    "test:unit": "mocha",
     "test:lint": "tslint -p tsconfig.json",
     "test:fmt": "prettier --list-different \"src/**/*.ts\" \"*.md\"",
     "test:md": "remark -f readme.md -q",
