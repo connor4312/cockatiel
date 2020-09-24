@@ -5,7 +5,7 @@ import { DelegateBackoff } from './DelegateBackoff';
 describe('DelegateBackoff', () => {
   it('passes through the context and sets next delay', () => {
     const b = new DelegateBackoff<number>(v => v * 2);
-    expect(b.next(4)!.duration()).to.equal(8);
+    expect(b.next(4)!.duration).to.equal(8);
   });
 
   it('halts delegate function returns undefined', () => {

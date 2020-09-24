@@ -177,11 +177,11 @@ describe('RetryPolicy', () => {
       Policy.handleAll()
         .retry()
         .attempts(3)
-        .execute(({ cancellationToken: cancellation }) => {
+        .execute(({ cancellationToken }) => {
           calls++;
-          expect(cancellation.isCancellationRequested).to.be.false;
+          expect(cancellationToken.isCancellationRequested).to.be.false;
           parent.cancel();
-          expect(cancellation.isCancellationRequested).to.be.true;
+          expect(cancellationToken.isCancellationRequested).to.be.true;
           throw err;
         }, parent.token),
     ).to.eventually.be.rejectedWith(err);

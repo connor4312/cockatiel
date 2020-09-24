@@ -1,30 +1,20 @@
-import { IBackoff } from './Backoff';
+import { IBackoff, IBackoffFactory } from './Backoff';
 
 /**
  * Backoff that returns a number from an iterable.
  */
-export class IterableBackoff implements IBackoff<void> {
-  constructor(
-    private readonly durations: ReadonlyArray<number>,
-    private readonly index: number = -1,
-  ) {}
-
-  /**
-   * @inheritdoc
-   */
-  public duration() {
-    if (this.index === -1) {
-      throw new Error('duration is avaiable until the first next call');
-    }
-    return this.durations[this.index];
-  }
+export class IterableBackoff implements IBackoffFactory<unknown> {
+  constructor(private readonly durations: ReadonlyArray<number>) {}
 
   /**
    * @inheritdoc
    */
   public next() {
-    return this.index < this.durations.length - 1
-      ? new IterableBackoff(this.durations, this.index + 1)
-      : undefined;
+    return instance(this.durations, 0);
   }
 }
+
+const instance = (durations: ReadonlyArray<number>, index: number): IBackoff<unknown> => ({
+  duration: durations[index],
+  next: () => (index < durations.length - 1 ? instance(durations, index + 1) : undefined),
+});

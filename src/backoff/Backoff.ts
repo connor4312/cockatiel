@@ -1,17 +1,22 @@
 /**
  * A generic type that returns backoff intervals.
  */
-export interface IBackoff<T> {
+export interface IBackoffFactory<T> {
+  /**
+   * Returns the first backoff duration. Can return "undefined" to signal
+   * that we should not back off.
+   */
+  next(context: T): IBackoff<T> | undefined;
+}
+
+/**
+ * A generic type that returns backoff intervals.
+ */
+export interface IBackoff<T> extends IBackoffFactory<T> {
   /**
    * Returns the number of milliseconds to wait for this backoff attempt.
    */
-  duration(): number;
-
-  /**
-   * Returns the next backoff duration. Can return "undefined" to signal
-   * that we should stop backing off.
-   */
-  next(context: T): IBackoff<T> | undefined;
+  readonly duration: number;
 }
 
 export * from './CompositeBackoff';
