@@ -75,7 +75,7 @@ const instance = <S>(
       return undefined;
     }
 
-    const [delay, nextState] = options.generator(state, options);
-    return instance(options, nextState, delay, attempt + 1);
+    const [nextDelay, nextState] = options.generator(state, options);
+    return instance(options, nextState, nextDelay, attempt + 1);
   },
 });

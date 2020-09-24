@@ -145,7 +145,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
     fn: (context: IRetryContext) => PromiseLike<T> | T,
     cancellationToken = CancellationToken.None,
   ): Promise<T> {
-    let factory: IBackoffFactory<IRetryBackoffContext<unknown>> =
+    const factory: IBackoffFactory<IRetryBackoffContext<unknown>> =
       this.options.backoff || new ConstantBackoff(0, 1);
     let backoff: IBackoff<IRetryBackoffContext<unknown>> | undefined;
     for (let retries = 0; ; retries++) {
