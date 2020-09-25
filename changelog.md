@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.0.0 - 2020-09-24
+
+- **breaking:** **reactor:** introduce a separate BackoffFactory interface for the first backoff
+
+  This _only_ requires changes if you use retry policies in your own code, outside of the `Policy.retry()`.
+
+  See [#30](https://github.com/connor4312/cockatiel/issues/30). For some backoff policies, such as delegate and exponential policies, the first backoff was always 0, before `next()` was called. This is undesirable, and fixing it involved separating the backoff factory from the backoff itself.
+
+  The backoff classes, such as `DelegateBackoff` and `ExponentialBackoff`, now _only_ have a `next()` method. The `duration`, which is now a property instead of a method, is only available after the first `next()` call.
+
+  For example, previously if you did this:
+
+  ```js
+  let backoff = new ExponentialBackoff();
+  while (!succeeded) {
+    if (!tryAgain()) {
+      await delay(backoff.duration());
+      backoff = backoff.next();
+    }
+  }
+  ```
+
+  You now need to call `next()` before you access `duration`:
+
+  ```js
+  let backoff = new ExponentialBackoff();
+  while (!succeeded) {
+    if (!tryAgain()) {
+      backoff = backoff.next();
+      await delay(backoff.duration);
+    }
+  }
+  ```
+
+  > Note: if you use typescript, you will need another variable for it to understand you. [Here's an example](https://github.com/connor4312/cockatiel/blob/657be03da7ff6d5fa68da4a0a4172e217882b6bc/src/RetryPolicy.ts#L149-L163) of how we use it inside the RetryPolicy.
+
 ## 1.1.1 - 2020-07-17
 
 - **fix:** events on the timeout policy being emitted incorrectly, or not emitted (see [#27](https://github.com/connor4312/cockatiel/issues/27))

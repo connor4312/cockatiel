@@ -2,7 +2,7 @@
 
 [![Actions Status](https://github.com/connor4312/cockatiel/workflows/Run%20Tests/badge.svg)](https://github.com/connor4312/cockatiel/actions)
 [![npm bundle size](https://img.shields.io/bundlephobia/minzip/cockatiel)](https://bundlephobia.com/result?p=cockatiel@0.1.0)
-![Libraries.io dependency status for latest release](https://david-dm.org/connor4312/cockatiel.svg)
+![No dependencies](https://img.shields.io/badge/dependencies-none-success)
 
 Cockatiel is resilience and transient-fault-handling library that allows developers to express policies such as Retry, Circuit Breaker, Timeout, Bulkhead Isolation, and Fallback. .NET has [Polly](https://github.com/App-vNext/Polly), a wonderful one-stop shop for all your fault handling needs--I missed having such a library for my JavaScript projects, and grew tired of copy-pasting retry logic between my projects. Hence, this module!
 
@@ -273,20 +273,28 @@ export async function handleRequest() {
 
 ## Backoffs
 
-Backoff algorithms are immutable. They adhere to the interface:
+Backoff algorithms are immutable. The backoff class adheres to the interface:
 
 ```ts
-export interface IBackoff<T> {
-  /**
-   * Returns the number of milliseconds to wait for this backoff attempt.
-   */
-  duration(): number;
-
+export interface IBackoffFactory<T> {
   /**
    * Returns the next backoff duration. Can return "undefined" to signal
    * that we should stop backing off.
    */
   next(context: T): IBackoff<T> | undefined;
+}
+```
+
+The backoff, returned from the `next()` call, has the appropriate delay and `next()` method again.
+
+```ts
+export interface IBackoff<T> {
+  next(context: T): IBackoff<T> | undefined; // same as above
+
+  /**
+   * Returns the number of milliseconds to wait for this backoff attempt.
+   */
+  readonly duration: number;
 }
 ```
 
@@ -371,7 +379,7 @@ Takes in a list of delays, and goes through them one by one. When it reaches the
 
 ```ts
 // Wait 100ms, 200ms, and then 500ms between attempts before giving up:
-const backoff new IterableBackoff([100, 200, 500]);
+const backoff = new IterableBackoff([100, 200, 500]);
 ```
 
 ### DelegateBackoff
