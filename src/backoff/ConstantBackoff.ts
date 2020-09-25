@@ -1,35 +1,16 @@
-import { IBackoff } from './Backoff';
+import { IBackoff, IBackoffFactory } from './Backoff';
 
 /**
  * Backoff that returns a constant interval.
  */
-export class ConstantBackoff implements IBackoff<void> {
-  private index = 0;
-
+export class ConstantBackoff implements IBackoffFactory<unknown> {
   constructor(private readonly interval: number, private readonly limit?: number) {}
 
   /**
    * @inheritdoc
    */
-  public duration() {
-    return this.interval;
-  }
-
-  /**
-   * @inheritdoc
-   */
   public next() {
-    if (this.limit === undefined) {
-      return this;
-    }
-
-    if (this.index >= this.limit - 1) {
-      return undefined;
-    }
-
-    const b = new ConstantBackoff(this.interval, this.limit);
-    b.index = this.index + 1;
-    return b;
+    return instance(this.interval, this.limit);
   }
 }
 
@@ -37,3 +18,18 @@ export class ConstantBackoff implements IBackoff<void> {
  * Backoff that never retries.
  */
 export const NeverRetryBackoff = new ConstantBackoff(0, 0);
+
+const instance = (interval: number, limit: number | undefined, index = 0): IBackoff<unknown> => ({
+  duration: interval,
+  next() {
+    if (limit === undefined) {
+      return this;
+    }
+
+    if (index >= limit - 1) {
+      return undefined;
+    }
+
+    return instance(interval, limit, index + 1);
+  },
+});

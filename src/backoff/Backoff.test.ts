@@ -1,12 +1,13 @@
 import { expect } from 'chai';
-import { IBackoff } from './Backoff';
+import { IBackoffFactory } from './Backoff';
 
 export const expectDurations = <T>(
-  backoff: IBackoff<T> | undefined,
+  backoffFactory: IBackoffFactory<T> | undefined,
   expected: ReadonlyArray<number | undefined>,
   context?: T,
 ) => {
   const actual: Array<number | undefined> = [];
+  let backoff = backoffFactory?.next(context as T);
   // tslint:disable-next-line: prefer-for-of
   for (let i = 0; i < expected.length; i++) {
     if (!backoff) {
@@ -14,7 +15,7 @@ export const expectDurations = <T>(
       continue;
     }
 
-    actual.push(backoff.duration());
+    actual.push(backoff?.duration);
     backoff = backoff.next(context as T);
   }
 

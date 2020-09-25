@@ -1,4 +1,4 @@
-import { IBackoff } from './Backoff';
+import { IBackoff, IBackoffFactory } from './Backoff';
 
 export type DelegateBackoffFn<T, S = void> = (
   context: T,
@@ -10,36 +10,27 @@ export type DelegateBackoffFn<T, S = void> = (
  * the backoff context, and can optionally take (and return) a state value
  * that will be passed into subsequent backoff requests.
  */
-export class DelegateBackoff<T, S = void> implements IBackoff<T> {
-  private current: number = 0;
-
-  constructor(private readonly fn: DelegateBackoffFn<T, S>, private readonly state?: S) {}
-
-  /**
-   * @inheritdoc
-   */
-  public duration() {
-    return this.current;
-  }
+export class DelegateBackoff<T, S = void> implements IBackoffFactory<T> {
+  constructor(private readonly fn: DelegateBackoffFn<T, S>) {}
 
   /**
    * @inheritdoc
    */
   public next(context: T) {
-    const result = this.fn(context, this.state);
+    return instance(this.fn).next(context);
+  }
+}
+
+const instance = <T, S>(fn: DelegateBackoffFn<T, S>, state?: S, current = 0): IBackoff<T> => ({
+  duration: current,
+  next(context: T) {
+    const result = fn(context, state);
     if (result === undefined) {
       return undefined;
     }
 
-    let b: DelegateBackoff<T, S>;
-    if (typeof result === 'number') {
-      b = new DelegateBackoff(this.fn, this.state);
-      b.current = result;
-    } else {
-      b = new DelegateBackoff(this.fn, result.state);
-      b.current = result.delay;
-    }
-
-    return b;
-  }
-}
+    return typeof result === 'number'
+      ? instance(fn, state, result)
+      : instance(fn, result.state, result.delay);
+  },
+});

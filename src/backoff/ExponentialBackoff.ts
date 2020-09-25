@@ -1,4 +1,4 @@
-import { IBackoff } from './Backoff';
+import { IBackoff, IBackoffFactory } from './Backoff';
 import { decorrelatedJitterGenerator, GeneratorFn } from './ExponentialBackoffGenerators';
 
 /**
@@ -48,31 +48,34 @@ const defaultOptions: IExponentialBackoffOptions<any> = {
 /**
  * An implementation of exponential backoff.
  */
-export class ExponentialBackoff<S> implements IBackoff<void> {
-  private options: IExponentialBackoffOptions<S>;
-  private state?: S;
-  private attempt = 0;
-  private delay = 0;
+export class ExponentialBackoff<S> implements IBackoffFactory<unknown> {
+  private readonly options: IExponentialBackoffOptions<S>;
 
   constructor(options?: Partial<IExponentialBackoffOptions<S>>) {
     this.options = options ? { ...defaultOptions, ...options } : defaultOptions;
   }
 
-  /**
-   * @inheritdoc
-   */
-  public duration() {
-    return this.delay;
-  }
-
   public next() {
-    if (this.attempt >= this.options.maxAttempts - 1) {
+    return instance(this.options).next(undefined);
+  }
+}
+
+/**
+ * An implementation of exponential backoff.
+ */
+const instance = <S>(
+  options: IExponentialBackoffOptions<S>,
+  state?: S,
+  delay = 0,
+  attempt = -1,
+): IBackoff<unknown> => ({
+  duration: delay,
+  next() {
+    if (attempt >= options.maxAttempts - 1) {
       return undefined;
     }
 
-    const e = new ExponentialBackoff(this.options);
-    [e.delay, e.state] = this.options.generator(this.state, this.options);
-    e.attempt = this.attempt + 1;
-    return e;
-  }
-}
+    const [nextDelay, nextState] = options.generator(state, options);
+    return instance(options, nextState, nextDelay, attempt + 1);
+  },
+});

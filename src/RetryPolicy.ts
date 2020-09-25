@@ -1,4 +1,9 @@
-import { ExponentialBackoff, IBackoff, IExponentialBackoffOptions } from './backoff/Backoff';
+import {
+  ExponentialBackoff,
+  IBackoff,
+  IBackoffFactory,
+  IExponentialBackoffOptions,
+} from './backoff/Backoff';
 import { CompositeBackoff, CompositeBias } from './backoff/CompositeBackoff';
 import { ConstantBackoff } from './backoff/ConstantBackoff';
 import { DelegateBackoff, DelegateBackoffFn } from './backoff/DelegateBackoff';
@@ -38,7 +43,7 @@ export interface IRetryBackoffContext<R> extends IRetryContext {
 }
 
 export interface IRetryPolicyConfig {
-  backoff?: IBackoff<IRetryBackoffContext<unknown>>;
+  backoff?: IBackoffFactory<IRetryBackoffContext<unknown>>;
 
   /**
    * Whether to unreference the internal timer. This means the policy will not
@@ -140,23 +145,32 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
     fn: (context: IRetryContext) => PromiseLike<T> | T,
     cancellationToken = CancellationToken.None,
   ): Promise<T> {
-    let backoff: IBackoff<IRetryBackoffContext<unknown>> | undefined =
+    const factory: IBackoffFactory<IRetryBackoffContext<unknown>> =
       this.options.backoff || new ConstantBackoff(0, 1);
+    let backoff: IBackoff<IRetryBackoffContext<unknown>> | undefined;
     for (let retries = 0; ; retries++) {
       const result = await this.executor.invoke(fn, { attempt: retries, cancellationToken });
       if ('success' in result) {
         return result.success;
       }
 
-      if (backoff && !cancellationToken.isCancellationRequested) {
-        const delayDuration = backoff.duration();
-        const delayPromise = delay(delayDuration, !!this.options.unref);
-        // A little sneaky reordering here lets us use Sinon's fake timers
-        // when we get an emission in our tests.
-        this.onRetryEmitter.emit({ ...result, delay: delayDuration });
-        await delayPromise;
-        backoff = backoff.next({ attempt: retries + 1, cancellationToken, result });
-        continue;
+      if (!cancellationToken.isCancellationRequested) {
+        const context = { attempt: retries + 1, cancellationToken, result };
+        if (retries === 0) {
+          backoff = factory.next(context);
+        } else if (backoff) {
+          backoff = backoff.next(context);
+        }
+
+        if (backoff) {
+          const delayDuration = backoff.duration;
+          const delayPromise = delay(delayDuration, !!this.options.unref);
+          // A little sneaky reordering here lets us use Sinon's fake timers
+          // when we get an emission in our tests.
+          this.onRetryEmitter.emit({ ...result, delay: delayDuration });
+          await delayPromise;
+          continue;
+        }
       }
 
       this.onGiveUpEmitter.emit(result);
@@ -168,7 +182,10 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
     }
   }
 
-  private composeBackoff(bias: CompositeBias, backoff: IBackoff<IRetryBackoffContext<unknown>>) {
+  private composeBackoff(
+    bias: CompositeBias,
+    backoff: IBackoffFactory<IRetryBackoffContext<unknown>>,
+  ) {
     if (this.options.backoff) {
       backoff = new CompositeBackoff(bias, this.options.backoff, backoff);
     }
