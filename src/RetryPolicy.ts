@@ -76,7 +76,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   public readonly onRetry = this.onRetryEmitter.addListener;
 
   /**
-   * @deprecated use `onFailure` instead
+   * Emitter that fires when we're no longer retrying a call and are giving up.
    */
   // tslint:disable-next-line: member-ordering
   public readonly onGiveUp = this.onGiveUpEmitter.addListener;

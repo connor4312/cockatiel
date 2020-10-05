@@ -1,5 +1,9 @@
 # Changelog
 
+## TBA
+
+- **fix:** remove incorrect deprecated marker on `RetryPolicy.onGiveUp`
+
 ## 2.0.0 - 2020-09-24
 
 - **breaking:** **reactor:** introduce a separate BackoffFactory interface for the first backoff
