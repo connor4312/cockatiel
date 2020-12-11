@@ -1,8 +1,9 @@
 # Changelog
 
-## TBA
+## 2.0.1
 
 - **fix:** remove incorrect deprecated marker on `RetryPolicy.onGiveUp`
+- **fix:** incorrect typings in `retry().backoff()` ([#34](https://github.com/connor4312/cockatiel/issues/34))
 
 ## 2.0.0 - 2020-09-24
 

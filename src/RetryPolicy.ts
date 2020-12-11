@@ -122,7 +122,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   /**
    * Sets the baackoff to use for retries.
    */
-  public backoff(backoff: IBackoff<IRetryBackoffContext<unknown>>) {
+  public backoff(backoff: IBackoffFactory<IRetryBackoffContext<unknown>>) {
     return this.composeBackoff('b', backoff);
   }
 
