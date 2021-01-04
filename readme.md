@@ -415,7 +415,7 @@ const myDelegateBackoff = new DelegateBackoff((context, lastError) => {
     return undefined; // will cause the error to be thrown
   }
 
-  return 100 * Math.pow(2, context.count);
+  return { delay: 100 * Math.pow(2, context.count), state: context.result.error };
 });
 ```
 
