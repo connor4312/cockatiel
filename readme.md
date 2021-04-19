@@ -47,7 +47,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`policy.orWhen(filter)`](#policyorwhenfilter)
   - [`Policy.handleResultType(ctor[, filter])`](#policyhandleresulttypector-filter)
   - [`policy.orResultType(ctor[, filter])`](#policyorresulttypector-filter)
-  - [`Policy.handleResultWhen(filter)`](#policyhandleresultwhenfilter)
+  - [`Policy.handleWhenResult(filter)`](#policyhandlewhenresultfilter)
   - [`policy.orWhenResult(filter)`](#policyorwhenresultfilter)
   - [`Policy.wrap(...policies)`](#policywrappolicies)
   - [`Policy.use(policy)`](#policyusepolicy)
@@ -196,14 +196,14 @@ Policy.handleResultType(ReturnedNetworkError).orResultType(
 // ...
 ```
 
-### `Policy.handleResultWhen(filter)`
+### `Policy.handleWhenResult(filter)`
 
 ### `policy.orWhenResult(filter)`
 
 Tells the policy to treat certain return values of the function as errors--retrying if they appear, for instance. Results will be retried the filter function returns true.
 
 ```ts
-Policy.handleResultWhen(res => res.statusCode === 503).orWhenResult(res => res.statusCode === 429);
+Policy.handleWhenResult(res => res.statusCode === 503).orWhenResult(res => res.statusCode === 429);
 // ...
 ```
 
