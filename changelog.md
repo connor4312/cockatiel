@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.2
+
+- **feat:** improve event performance
+- **fix:** export `IDisposable`
+
 ## 2.0.1
 
 - **fix:** remove incorrect deprecated marker on `RetryPolicy.onGiveUp`

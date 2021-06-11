@@ -140,9 +140,6 @@ describe('CircuitBreakerPolicy', () => {
   });
 
   it('handles isolation correctly', async () => {
-    p.onBreak(onBreak);
-    p.onReset(onReset);
-
     const handle1 = p.isolate();
     expect(onBreak).calledOnceWith({ isolated: true });
 

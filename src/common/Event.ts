@@ -73,7 +73,7 @@ export namespace Event {
  * Base event emitter. Calls listeners when data is emitted.
  */
 export class EventEmitter<T> {
-  protected readonly listeners = new Set<(data: T) => void>();
+  private listeners?: Array<(data: T) => void> | ((data: T) => void);
 
   /**
    * Event<T> function.
@@ -84,21 +84,64 @@ export class EventEmitter<T> {
    * Gets the number of event listeners.
    */
   public get size() {
-    return this.listeners.size;
+    if (!this.listeners) {
+      return 0;
+    } else if (typeof this.listeners === 'function') {
+      return 1;
+    } else {
+      return this.listeners.length;
+    }
   }
 
   /**
    * Emits event data.
    */
   public emit(value: T) {
-    for (const listener of this.listeners) {
-      listener(value);
+    if (!this.listeners) {
+      // no-op
+    } else if (typeof this.listeners === 'function') {
+      this.listeners(value);
+    } else {
+      for (const listener of this.listeners) {
+        listener(value);
+      }
     }
   }
 
   protected addListenerInner(listener: (data: T) => void): IDisposable {
-    this.listeners.add(listener);
-    return { dispose: () => this.listeners.delete(listener) };
+    if (!this.listeners) {
+      this.listeners = listener;
+    } else if (typeof this.listeners === 'function') {
+      this.listeners = [this.listeners, listener];
+    } else {
+      this.listeners.push(listener);
+    }
+
+    return { dispose: () => this.removeListener(listener) };
+  }
+
+  private removeListener(listener: (data: T) => void) {
+    if (!this.listeners) {
+      return;
+    }
+
+    if (typeof this.listeners === 'function') {
+      if (this.listeners === listener) {
+        this.listeners = undefined;
+      }
+      return;
+    }
+
+    const index = this.listeners.indexOf(listener);
+    if (index === -1) {
+      return;
+    }
+
+    if (this.listeners.length === 2) {
+      this.listeners = index === 0 ? this.listeners[1] : this.listeners[0];
+    } else {
+      this.listeners = this.listeners.slice(0, index).concat(this.listeners.slice(index + 1));
+    }
   }
 }
 
@@ -137,9 +180,6 @@ export class MemorizingEventEmitter<T> extends EventEmitter<T> {
    */
   public emit(value: T) {
     this.lastValue = { value };
-
-    for (const listener of this.listeners) {
-      listener(value);
-    }
+    super.emit(value);
   }
 }
