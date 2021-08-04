@@ -681,7 +681,7 @@ listener.dispose();
 An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
 
 ```js
-const listener = retry.onSuccess({ duration }) => {
+const listener = retry.onSuccess(({ duration }) => {
   console.log(`retry call ran in ${duration}ms`);
 });
 
@@ -694,7 +694,7 @@ listener.dispose();
 An [event emitter](#events) that fires whenever a function throw an error or returns an errorful result. It's invoked with the duration of the call, the reason for the failure, and an boolean indicating whether the error is handled by the policy.
 
 ```js
-const listener = retry.onFailure({ duration, handled, reason }) => {
+const listener = retry.onFailure(({ duration, handled, reason }) => {
   console.log(`retry call ran in ${duration}ms and failed with`, reason);
   console.log(handled ? 'error was handled' : 'error was not handled');
 });
@@ -865,7 +865,7 @@ listener.dispose();
 An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
 
 ```js
-const listener = breaker.onSuccess({ duration }) => {
+const listener = breaker.onSuccess(({ duration }) => {
   console.log(`circuit breaker call ran in ${duration}ms`);
 });
 
@@ -878,7 +878,7 @@ listener.dispose();
 An [event emitter](#events) that fires whenever a function throw an error or returns an errorful result. It's invoked with the duration of the call, the reason for the failure, and an boolean indicating whether the error is handled by the policy.
 
 ```js
-const listener = breaker.onFailure({ duration, handled, reason }) => {
+const listener = breaker.onFailure(({ duration, handled, reason }) => {
   console.log(`circuit breaker call ran in ${duration}ms and failed with`, reason);
   console.log(handled ? 'error was handled' : 'error was not handled');
 });
@@ -951,7 +951,7 @@ listener.dispose();
 An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
 
 ```js
-const listener = timeout.onSuccess({ duration }) => {
+const listener = timeout.onSuccess(({ duration }) => {
   console.log(`timeout call ran in ${duration}ms`);
 });
 
@@ -966,7 +966,7 @@ An [event emitter](#events) that fires whenever a function throw an error or ret
 This is _only_ called when the function itself fails, and not when a timeout happens.
 
 ```js
-const listener = timeout.onFailure({ duration, handled, reason }) => {
+const listener = timeout.onFailure(({ duration, handled, reason }) => {
   console.log(`timeout call ran in ${duration}ms and failed with`, reason);
   console.log(handled ? 'error was handled' : 'error was not handled');
 });
@@ -1038,7 +1038,7 @@ listener.dispose();
 An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
 
 ```js
-const listener = bulkhead.onSuccess({ duration }) => {
+const listener = bulkhead.onSuccess(({ duration }) => {
   console.log(`bulkhead call ran in ${duration}ms`);
 });
 
@@ -1053,7 +1053,7 @@ An [event emitter](#events) that fires whenever a function throw an error or ret
 This is _only_ called when the function itself fails, and not when a bulkhead rejection occurs.
 
 ```js
-const listener = bulkhead.onFailure({ duration, handled, reason }) => {
+const listener = bulkhead.onFailure(({ duration, handled, reason }) => {
   console.log(`bulkhead call ran in ${duration}ms and failed with`, reason);
   console.log(handled ? 'error was handled' : 'error was not handled');
 });
@@ -1099,7 +1099,7 @@ const result = await fallback.execute(() => getInfoFromDatabase());
 An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
 
 ```js
-const listener = fallback.onSuccess({ duration }) => {
+const listener = fallback.onSuccess(({ duration }) => {
   console.log(`fallback call ran in ${duration}ms`);
 });
 
@@ -1114,7 +1114,7 @@ An [event emitter](#events) that fires whenever a function throw an error or ret
 If the error was handled, the fallback will kick in.
 
 ```js
-const listener = fallback.onFailure({ duration, handled, reason }) => {
+const listener = fallback.onFailure(({ duration, handled, reason }) => {
   console.log(`fallback call ran in ${duration}ms and failed with`, reason);
   console.log(handled ? 'error was handled' : 'error was not handled');
 });
