@@ -72,7 +72,7 @@ export interface IDefaultPolicyContext {
  */
 export interface IPolicy<
   ContextType extends IDefaultPolicyContext = IDefaultPolicyContext,
-  AltReturn = never
+  AltReturn = never,
 > {
   /**
    * Fires on the policy when a request successfully completes and some
@@ -153,18 +153,18 @@ export class Policy {
   public static wrap<A extends IPolicy<IDefaultPolicyContext, unknown>>(p1: A): PolicyType<A>;
   public static wrap<
     A extends IPolicy<IDefaultPolicyContext, unknown>,
-    B extends IPolicy<IDefaultPolicyContext, unknown>
+    B extends IPolicy<IDefaultPolicyContext, unknown>,
   >(p1: A, p2: B): MergePolicies<PolicyType<A>, PolicyType<B>>;
   public static wrap<
     A extends IPolicy<IDefaultPolicyContext, unknown>,
     B extends IPolicy<IDefaultPolicyContext, unknown>,
-    C extends IPolicy<IDefaultPolicyContext, unknown>
+    C extends IPolicy<IDefaultPolicyContext, unknown>,
   >(p1: A, p2: B, p3: C): MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>;
   public static wrap<
     A extends IPolicy<IDefaultPolicyContext, unknown>,
     B extends IPolicy<IDefaultPolicyContext, unknown>,
     C extends IPolicy<IDefaultPolicyContext, unknown>,
-    D extends IPolicy<IDefaultPolicyContext, unknown>
+    D extends IPolicy<IDefaultPolicyContext, unknown>,
   >(
     p1: A,
     p2: B,
@@ -179,7 +179,7 @@ export class Policy {
     B extends IPolicy<IDefaultPolicyContext, unknown>,
     C extends IPolicy<IDefaultPolicyContext, unknown>,
     D extends IPolicy<IDefaultPolicyContext, unknown>,
-    E extends IPolicy<IDefaultPolicyContext, unknown>
+    E extends IPolicy<IDefaultPolicyContext, unknown>,
   >(
     p1: A,
     p2: B,
