@@ -1,6 +1,5 @@
 import { expect } from 'chai';
 import { stub } from 'sinon';
-import { CancellationTokenSource } from './CancellationToken';
 import { Policy } from './Policy';
 
 describe('FallbackPolicy', () => {
@@ -29,13 +28,13 @@ describe('FallbackPolicy', () => {
   });
 
   it('links parent cancellation token', async () => {
-    const parent = new CancellationTokenSource();
+    const parent = new AbortController();
     await Policy.handleAll()
       .fallback('error')
-      .execute(({ cancellationToken }) => {
-        expect(cancellationToken.isCancellationRequested).to.be.false;
-        parent.cancel();
-        expect(cancellationToken.isCancellationRequested).to.be.true;
-      }, parent.token);
+      .execute(({ signal }) => {
+        expect(signal.aborted).to.be.false;
+        parent.abort();
+        expect(signal.aborted).to.be.true;
+      }, parent.signal);
   });
 });

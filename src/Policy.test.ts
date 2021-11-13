@@ -1,7 +1,6 @@
 import { expect } from 'chai';
 import { stub } from 'sinon';
 import { ConsecutiveBreaker } from './breaker/Breaker';
-import { CancellationToken, CancellationTokenSource } from './CancellationToken';
 import { BrokenCircuitError } from './errors/Errors';
 import { Policy } from './Policy';
 import { IRetryContext } from './RetryPolicy';
@@ -39,7 +38,7 @@ describe('Policy', () => {
     );
 
     const result = await policy.execute(context => {
-      expect(context.cancellation).to.be.an.instanceOf(CancellationToken);
+      expect(context.cancellation).to.be.an.instanceOf(AbortSignal);
       expect(context.attempt).to.equal(0);
       return 1234;
     });
@@ -125,7 +124,7 @@ describe('Policy', () => {
     const r = await c.double(2);
     expect(r).to.deep.equal({
       n: 4,
-      cancellationToken: r.cancellationToken,
+      signal: r.signal,
       attempt: 2,
     });
   });
@@ -135,16 +134,16 @@ describe('Policy', () => {
       @Policy.use(Policy.handleAll().retry().attempts(5))
       public double(n: number, context: IRetryContext) {
         expect(n).to.equal(2);
-        expect(context.cancellationToken.isCancellationRequested).to.be.false;
-        cts.cancel();
-        expect(context.cancellationToken.isCancellationRequested).to.be.true;
+        expect(context.signal.aborted).to.be.false;
+        cts.abort();
+        expect(context.signal.aborted).to.be.true;
         return n * 2;
       }
     }
 
-    const cts = new CancellationTokenSource();
+    const cts = new AbortController();
     const c = new Calculator();
     // @ts-ignore
-    expect(await c.double(2, cts.token)).to.equal(4);
+    expect(await c.double(2, cts.signal)).to.equal(4);
   });
 });

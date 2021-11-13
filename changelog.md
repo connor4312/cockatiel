@@ -1,5 +1,20 @@
 # Changelog
 
+## TBA
+
+**Not yet published**
+
+- **breaking:** **refactor:** move to using native `AbortSignal` over `CancellationToken`.
+
+  Previously, this package provided its own implementation of cancellation via the `CancellationTokenSource` and `CancellationToken`. Now, we use the native `AbortSignal` which is available in browsers and Node.js since Node 16. To migrate, instead of...
+
+  - accessing `context.cancellationToken`, access `context.signal` which is an `AbortSignal`,
+  - pass in an `AbortSignal` as the second argument to `Policy.execute`, instead of a `CancellationToken`,
+  - use `signal.aborted` instead of `signal.isCancellationRequested` to check for cancellation,
+  - use `signal.addEventListener("abort", fn)` instead of `signal.onCancellationRequested(fn)` to listen for cancellation,
+  - use `new AbortController()` instead of `new CancellationTokenSource()`, and `ctrl.abort()` and `ctrl.signal` instead of `ctrl.cancel()` and `ctrl.token()`,
+  - use the helper function `deriveAbortController(signal)` exported from this package instead of `new CancellationTokenSource(parent)`.
+
 ## 2.0.2
 
 - **feat:** improve event performance

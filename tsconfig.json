@@ -11,8 +11,8 @@
     "moduleResolution": "node",
     "newLine": "LF",
     "module": "commonjs",
-    "target": "es2018",
-    "lib": ["es2018"],
+    "target": "ES2021",
+    "lib": ["ES2021", "WebWorker"],
     "outDir": "dist",
     "types": [
       "node",

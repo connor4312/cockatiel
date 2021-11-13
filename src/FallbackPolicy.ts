@@ -1,4 +1,4 @@
-import { CancellationToken } from './CancellationToken';
+import { neverAbortedSignal } from './common/abort';
 import { ExecuteWrapper } from './common/Executor';
 import { IDefaultPolicyContext, IPolicy } from './Policy';
 
@@ -24,9 +24,9 @@ export class FallbackPolicy<AltReturn> implements IPolicy<IDefaultPolicyContext,
    */
   public async execute<T>(
     fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
-    cancellationToken = CancellationToken.None,
+    signal = neverAbortedSignal,
   ): Promise<T | AltReturn> {
-    const result = await this.executor.invoke(fn, { cancellationToken });
+    const result = await this.executor.invoke(fn, { signal });
     if ('success' in result) {
       return result.success;
     }

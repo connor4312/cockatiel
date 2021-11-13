@@ -2,8 +2,8 @@ import { expect } from 'chai';
 import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
 import { promisify } from 'util';
 import { ConsecutiveBreaker } from './breaker/Breaker';
-import { CancellationToken, CancellationTokenSource } from './CancellationToken';
 import { CircuitBreakerPolicy, CircuitState } from './CircuitBreakerPolicy';
+import { abortedSignal } from './common/abort';
 import { BrokenCircuitError, TaskCancelledError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
 import { Policy } from './Policy';
@@ -161,14 +161,14 @@ describe('CircuitBreakerPolicy', () => {
   });
 
   it('links parent cancellation token', async () => {
-    const parent = new CancellationTokenSource();
+    const parent = new AbortController();
     await Policy.handleAll()
       .circuitBreaker(1000, new ConsecutiveBreaker(3))
-      .execute(({ cancellationToken }) => {
-        expect(cancellationToken.isCancellationRequested).to.be.false;
-        parent.cancel();
-        expect(cancellationToken.isCancellationRequested).to.be.true;
-      }, parent.token);
+      .execute(({ signal }) => {
+        expect(signal.aborted).to.be.false;
+        parent.abort();
+        expect(signal.aborted).to.be.true;
+      }, parent.signal);
   });
 
   it('aborts function execution if half open test succeeds', async () => {
@@ -180,9 +180,7 @@ describe('CircuitBreakerPolicy', () => {
     p.execute(stub().resolves(42));
 
     // queued timeout:
-    await expect(p.execute(stub(), CancellationToken.Cancelled)).to.be.rejectedWith(
-      TaskCancelledError,
-    );
+    await expect(p.execute(stub(), abortedSignal)).to.be.rejectedWith(TaskCancelledError);
 
     expect(p.state).to.equal(CircuitState.Closed);
     expect(onReset).calledOnce;

@@ -10,7 +10,7 @@
       "name": "Run Tests",
       "skipFiles": ["<node_internals>/**"],
       "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
-      "args": ["--opts", "${workspaceFolder}/mocha.opts", "--colors"],
+      "args": ["--colors"],
       "console": "integratedTerminal"
     }
   ]

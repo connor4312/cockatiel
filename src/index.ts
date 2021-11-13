@@ -1,7 +1,6 @@
 export * from './backoff/Backoff';
 export * from './breaker/Breaker';
 export * from './BulkheadPolicy';
-export * from './CancellationToken';
 export * from './CircuitBreakerPolicy';
 export { Event, EventEmitter, IDisposable } from './common/Event';
 export * from './errors/Errors';

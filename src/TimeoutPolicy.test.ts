@@ -1,7 +1,6 @@
 import { expect } from 'chai';
 import { SinonStub, stub } from 'sinon';
 import { promisify } from 'util';
-import { CancellationTokenSource } from './CancellationToken';
 import { runInChild } from './common/util.test';
 import { TaskCancelledError } from './errors/TaskCancelledError';
 import { Policy } from './Policy';
@@ -18,10 +17,10 @@ describe('TimeoutPolicy', () => {
   it('properly cooperatively cancels', async () => {
     const policy = Policy.timeout(2, TimeoutStrategy.Cooperative);
     expect(
-      await policy.execute(async ({ cancellation }) => {
-        expect(cancellation.isCancellationRequested).to.be.false;
+      await policy.execute(async ({ signal }) => {
+        expect(signal.aborted).to.be.false;
         await delay(3);
-        expect(cancellation.isCancellationRequested).to.be.true;
+        expect(signal.aborted).to.be.true;
         return 42;
       }),
     ).to.equal(42);
@@ -32,12 +31,12 @@ describe('TimeoutPolicy', () => {
     let verified: Promise<void>;
     await expect(
       policy.execute(
-        async ({ cancellation }) =>
+        async ({ signal }) =>
           (verified = (async () => {
             await delay(0);
-            expect(cancellation.isCancellationRequested).to.be.false;
+            expect(signal.aborted).to.be.false;
             await delay(5);
-            expect(cancellation.isCancellationRequested).to.be.true;
+            expect(signal.aborted).to.be.true;
           })()),
       ),
     ).to.eventually.be.rejectedWith(TaskCancelledError);
@@ -67,21 +66,21 @@ describe('TimeoutPolicy', () => {
   });
 
   it('links parent cancellation token', async () => {
-    const parent = new CancellationTokenSource();
-    await Policy.timeout(1000, TimeoutStrategy.Cooperative).execute((_, ct) => {
-      expect(ct.isCancellationRequested).to.be.false;
-      parent.cancel();
-      expect(ct.isCancellationRequested).to.be.true;
-    }, parent.token);
+    const parent = new AbortController();
+    await Policy.timeout(1000, TimeoutStrategy.Cooperative).execute((_, signal) => {
+      expect(signal.aborted).to.be.false;
+      parent.abort();
+      expect(signal.aborted).to.be.true;
+    }, parent.signal);
   });
 
   it('still has own timeout if given parent', async () => {
-    const parent = new CancellationTokenSource();
-    await Policy.timeout(1, TimeoutStrategy.Cooperative).execute(async (_, ct) => {
-      expect(ct.isCancellationRequested).to.be.false;
+    const parent = new AbortController();
+    await Policy.timeout(1, TimeoutStrategy.Cooperative).execute(async (_, signal) => {
+      expect(signal.aborted).to.be.false;
       await delay(3);
-      expect(ct.isCancellationRequested).to.be.true;
-    }, parent.token);
+      expect(signal.aborted).to.be.true;
+    }, parent.signal);
   });
 
   describe('events', () => {
