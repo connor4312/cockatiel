@@ -1,8 +1,6 @@
 # Changelog
 
-## TBA
-
-**Not yet published**
+## 3.0.0-beta.0
 
 - **breaking:** **refactor:** move to using native `AbortSignal` over `CancellationToken`.
 
