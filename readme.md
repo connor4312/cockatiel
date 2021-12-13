@@ -102,6 +102,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`fallback.execute(fn[, signal])`](#fallbackexecutefn-signal)
   - [`fallback.onSuccess(callback)`](#fallbackonsuccesscallback)
   - [`fallback.onFailure(callback)`](#fallbackonfailurecallback)
+- [See Also](#see-also)
 
 ## `IPolicy` (the shape of a policy)
 
@@ -1013,3 +1014,8 @@ const listener = fallback.onFailure(({ duration, handled, reason }) => {
 // later:
 listener.dispose();
 ```
+
+## See Also
+
+- [App-vNext/Polly](https://github.com/App-vNext/Polly): the original, .NET implementation of Polly
+- [polly-js](https://github.com/mauricedb/polly-js): a similar package with a subset of .NET Polly/Cockatiel functionality
