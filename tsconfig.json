@@ -12,7 +12,7 @@
     "newLine": "LF",
     "module": "commonjs",
     "target": "ES2021",
-    "lib": ["ES2021", "WebWorker"],
+    "lib": ["ES2021"],
     "outDir": "dist",
     "types": [
       "node",

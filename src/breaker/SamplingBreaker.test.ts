@@ -1,9 +1,10 @@
 import { expect, use } from 'chai';
+import * as subset from 'chai-subset';
 import { SinonFakeTimers, useFakeTimers } from 'sinon';
 import { CircuitState } from '../CircuitBreakerPolicy';
 import { SamplingBreaker } from './SamplingBreaker';
 
-use(require('chai-subset'));
+use(subset);
 
 const getState = (b: SamplingBreaker) => {
   const untyped: any = b;

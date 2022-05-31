@@ -1,5 +1,5 @@
-import { deriveAbortController, waitForAbort } from './common/abort';
-import { EventEmitter } from './common/Event';
+import { deriveAbortController } from './common/abort';
+import { Event, EventEmitter, onAbort } from './common/Event';
 import { ExecuteWrapper, returnOrThrow } from './common/Executor';
 import { TaskCancelledError } from './errors/TaskCancelledError';
 import { IPolicy } from './Policy';
@@ -78,8 +78,8 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
 
     const context = { signal: aborter.signal };
 
-    const onCancelledListener = () => this.timeoutEmitter.emit();
-    aborter.signal.addEventListener('abort', onCancelledListener);
+    const onceAborted = onAbort(aborter.signal);
+    const onCancelledListener = onceAborted(() => this.timeoutEmitter.emit());
 
     try {
       if (this.strategy === TimeoutStrategy.Cooperative) {
@@ -90,14 +90,14 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
         .invoke(async () =>
           Promise.race<T>([
             Promise.resolve(fn(context, aborter.signal)),
-            waitForAbort(aborter.signal).then(() => {
+            Event.toPromise(onceAborted).then(() => {
               throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);
             }),
           ]),
         )
         .then(returnOrThrow);
     } finally {
-      aborter.signal.removeEventListener('abort', onCancelledListener);
+      onCancelledListener.dispose();
       aborter.abort();
       clearTimeout(timer);
     }

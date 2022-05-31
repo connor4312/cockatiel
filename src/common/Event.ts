@@ -55,27 +55,43 @@ export namespace Event {
     }
 
     return new Promise((resolve, reject) => {
-      const d2 = once(event, data => {
-        signal.removeEventListener('abort', d1);
-        resolve(data);
+      const d1 = onAbort(signal)(() => {
+        d2.dispose();
+        reject(new TaskCancelledError());
       });
 
-      const d1 = () => {
-        d2.dispose();
-        signal.removeEventListener('abort', d1);
-        reject(new TaskCancelledError());
-      };
-
-      signal.addEventListener('abort', d1);
+      const d2 = once(event, data => {
+        d1.dispose();
+        resolve(data);
+      });
     });
   };
 }
+
+/** Creates an Event that fires when the signal is aborted. */
+export const onAbort = (signal: AbortSignal): Event<void> => {
+  const evt = new OneShotEvent<void>();
+  if (signal.aborted) {
+    evt.emit();
+    return evt.addListener;
+  }
+
+  // @types/node is currently missing the event types on AbortSignal
+  const l = () => {
+    evt.emit();
+    (signal as any).removeEventListener('abort', l);
+  };
+
+  (signal as any).addEventListener('abort', l);
+
+  return evt.addListener;
+};
 
 /**
  * Base event emitter. Calls listeners when data is emitted.
  */
 export class EventEmitter<T> {
-  private listeners?: Array<(data: T) => void> | ((data: T) => void);
+  protected listeners?: Array<(data: T) => void> | ((data: T) => void);
 
   /**
    * Event<T> function.
@@ -183,5 +199,38 @@ export class MemorizingEventEmitter<T> extends EventEmitter<T> {
   public emit(value: T) {
     this.lastValue = { value };
     super.emit(value);
+  }
+}
+
+/**
+ * An event emitter that fires a value once and removes all
+ * listeners automatically after doing so.
+ */
+class OneShotEvent<T> extends EventEmitter<T> {
+  /**
+   * Last emitted value, wrapped in an object so that we can correctly detect
+   * emission of 'undefined' values.
+   */
+  private lastValue?: { value: T };
+
+  /**
+   * @inheritdoc
+   */
+  public readonly addListener: Event<T> = listener => {
+    if (this.lastValue) {
+      listener(this.lastValue.value);
+      return noopDisposable;
+    } else {
+      return this.addListenerInner(listener);
+    }
+  };
+
+  /**
+   * @inheritdoc
+   */
+  public emit(value: T) {
+    this.lastValue = { value };
+    super.emit(value);
+    this.listeners = undefined;
   }
 }
