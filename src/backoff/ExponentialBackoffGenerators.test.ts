@@ -20,7 +20,6 @@ describe('ExponentialBackoff Generators', () => {
       const options: IExponentialBackoffOptions<any> = {
         generator,
         maxDelay: 30000,
-        maxAttempts: Infinity,
         exponent: 2,
         initialDelay: 128,
       };

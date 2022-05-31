@@ -40,11 +40,8 @@ export class ExecuteWrapper {
     private readonly resultFilter: (result: unknown) => boolean = () => false,
   ) {}
 
-  public derive() {
-    const e = new ExecuteWrapper(this.errorFilter, this.resultFilter);
-    e.onSuccess(evt => this.successEmitter.emit(evt));
-    e.onFailure(evt => this.failureEmitter.emit(evt));
-    return e;
+  public clone() {
+    return new ExecuteWrapper(this.errorFilter, this.resultFilter);
   }
 
   public async invoke<T extends unknown[], R>(

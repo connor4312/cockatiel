@@ -6,7 +6,7 @@ import { CircuitBreakerPolicy, CircuitState } from './CircuitBreakerPolicy';
 import { abortedSignal } from './common/abort';
 import { BrokenCircuitError, TaskCancelledError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
-import { Policy } from './Policy';
+import { circuitBreaker, handleAll, handleType } from './Policy';
 
 class MyException extends Error {}
 
@@ -20,7 +20,10 @@ describe('CircuitBreakerPolicy', () => {
   let onHalfOpen: SinonStub;
 
   beforeEach(() => {
-    p = Policy.handleType(MyException).circuitBreaker(1000, new ConsecutiveBreaker(2));
+    p = circuitBreaker(handleType(MyException), {
+      halfOpenAfter: 1000,
+      breaker: new ConsecutiveBreaker(2),
+    });
     clock = useFakeTimers();
     onBreak = stub();
     onReset = stub();
@@ -162,13 +165,14 @@ describe('CircuitBreakerPolicy', () => {
 
   it('links parent cancellation token', async () => {
     const parent = new AbortController();
-    await Policy.handleAll()
-      .circuitBreaker(1000, new ConsecutiveBreaker(3))
-      .execute(({ signal }) => {
-        expect(signal.aborted).to.be.false;
-        parent.abort();
-        expect(signal.aborted).to.be.true;
-      }, parent.signal);
+    await circuitBreaker(handleAll, {
+      halfOpenAfter: 1000,
+      breaker: new ConsecutiveBreaker(3),
+    }).execute(({ signal }) => {
+      expect(signal.aborted).to.be.false;
+      parent.abort();
+      expect(signal.aborted).to.be.true;
+    }, parent.signal);
   });
 
   it('aborts function execution if half open test succeeds', async () => {

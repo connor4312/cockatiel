@@ -21,11 +21,6 @@ export interface IExponentialBackoffOptions<S> {
   maxDelay: number;
 
   /**
-   * Maximum retry attempts. Defaults to Infinity.
-   */
-  maxAttempts: number;
-
-  /**
    * Backoff exponent. Defaults to 2.
    */
   exponent: number;
@@ -40,7 +35,6 @@ export interface IExponentialBackoffOptions<S> {
 const defaultOptions: IExponentialBackoffOptions<any> = {
   generator: decorrelatedJitterGenerator,
   maxDelay: 30000,
-  maxAttempts: Infinity,
   exponent: 2,
   initialDelay: 128,
 };
@@ -71,10 +65,6 @@ const instance = <S>(
 ): IBackoff<unknown> => ({
   duration: delay,
   next() {
-    if (attempt >= options.maxAttempts - 1) {
-      return undefined;
-    }
-
     const [nextDelay, nextState] = options.generator(state, options);
     return instance(options, nextState, nextDelay, attempt + 1);
   },

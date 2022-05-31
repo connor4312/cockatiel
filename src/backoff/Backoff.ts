@@ -6,7 +6,7 @@ export interface IBackoffFactory<T> {
    * Returns the first backoff duration. Can return "undefined" to signal
    * that we should not back off.
    */
-  next(context: T): IBackoff<T> | undefined;
+  next(context: T): IBackoff<T>;
 }
 
 /**
@@ -19,7 +19,6 @@ export interface IBackoff<T> extends IBackoffFactory<T> {
   readonly duration: number;
 }
 
-export * from './CompositeBackoff';
 export * from './ConstantBackoff';
 export * from './DelegateBackoff';
 export * from './ExponentialBackoff';

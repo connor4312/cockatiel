@@ -4,7 +4,7 @@ import { abortedSignal } from './common/abort';
 import { defer } from './common/defer';
 import { BulkheadRejectedError } from './errors/BulkheadRejectedError';
 import { TaskCancelledError } from './errors/Errors';
-import { Policy } from './Policy';
+import { bulkhead } from './Policy';
 
 const delay = promisify(setTimeout);
 
@@ -35,7 +35,7 @@ describe('Bulkhead', () => {
   };
 
   it('rejects calls after limit is hit', async () => {
-    const b = Policy.bulkhead(2);
+    const b = bulkhead(2);
     const funcs = makeFns(3);
     const output = funcs.map(fn => b.execute(fn));
 
@@ -49,7 +49,7 @@ describe('Bulkhead', () => {
   });
 
   it('queues requests, and rejects after queue limit', async () => {
-    const b = Policy.bulkhead(2, 2);
+    const b = bulkhead(2, 2);
     const funcs = makeFns(5);
     const output = funcs.map(fn => b.execute(fn));
 
@@ -74,7 +74,7 @@ describe('Bulkhead', () => {
   });
 
   it('maintains proper state', async () => {
-    const b = Policy.bulkhead(2, 2);
+    const b = bulkhead(2, 2);
     const defer1 = defer();
     const defer2 = defer();
     const defer3 = defer();
@@ -121,12 +121,12 @@ describe('Bulkhead', () => {
   });
 
   it('links parent cancellation token', async () => {
-    const bulkhead = Policy.bulkhead(1, Infinity);
+    const b = bulkhead(1, Infinity);
     const todo: Array<PromiseLike<void>> = [];
     for (let i = 0; i < 3; i++) {
       const parent = new AbortController();
       todo.push(
-        bulkhead.execute(async ({ signal }) => {
+        b.execute(async ({ signal }) => {
           await delay(1);
           expect(signal.aborted).to.be.false;
           parent.abort();
@@ -138,7 +138,7 @@ describe('Bulkhead', () => {
     // initially cancelled
     todo.push(
       expect(
-        bulkhead.execute(() => {
+        b.execute(() => {
           throw new Error('expected not to call');
         }, abortedSignal),
       ).to.be.rejectedWith(TaskCancelledError),
@@ -149,7 +149,7 @@ describe('Bulkhead', () => {
     setTimeout(() => cancelledCts.abort(), 2);
     todo.push(
       expect(
-        bulkhead.execute(() => {
+        b.execute(() => {
           throw new Error('expected not to call');
         }, cancelledCts.signal),
       ).to.be.rejectedWith(TaskCancelledError),

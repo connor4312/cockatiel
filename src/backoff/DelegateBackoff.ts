@@ -3,7 +3,7 @@ import { IBackoff, IBackoffFactory } from './Backoff';
 export type DelegateBackoffFn<T, S = void> = (
   context: T,
   state?: S,
-) => { delay: number; state: S } | number | undefined;
+) => { delay: number; state: S } | number;
 
 /**
  * Backoff that delegates to a user-provided function. The function takes
@@ -25,10 +25,6 @@ const instance = <T, S>(fn: DelegateBackoffFn<T, S>, state?: S, current = 0): IB
   duration: current,
   next(context: T) {
     const result = fn(context, state);
-    if (result === undefined) {
-      return undefined;
-    }
-
     return typeof result === 'number'
       ? instance(fn, state, result)
       : instance(fn, result.state, result.delay);

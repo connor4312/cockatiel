@@ -4,28 +4,39 @@
 [![npm bundle size](https://img.shields.io/bundlephobia/minzip/cockatiel)](https://bundlephobia.com/result?p=cockatiel@0.1.0)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-success)
 
+> This is documentation for the 3.0 beta version. For docs on 2.0, please [go here](https://github.com/connor4312/cockatiel/blob/v2.0.2/readme.md).
+
 Cockatiel is resilience and transient-fault-handling library that allows developers to express policies such as Retry, Circuit Breaker, Timeout, Bulkhead Isolation, and Fallback. .NET has [Polly](https://github.com/App-vNext/Polly), a wonderful one-stop shop for all your fault handling needs--I missed having such a library for my JavaScript projects, and grew tired of copy-pasting retry logic between my projects. Hence, this module!
 
-    npm install --save cockatiel
+    npm install --save cockatiel@3.0.0-beta.1
 
 Then go forth with confidence:
 
 ```js
-// alternatively: const { Policy, ConsecutiveBreaker } = require('cockatiel');
-import { Policy, ConsecutiveBreaker } from 'cockatiel';
+import {
+  ConsecutiveBreaker,
+  ExponentialBackoff,
+  retry,
+  handleAll,
+  circuitBreaker,
+  wrap,
+} from 'cockatiel';
 import { database } from './my-db';
 
 // Create a retry policy that'll try whatever function we execute 3
 // times with a randomized exponential backoff.
-const retry = Policy.handleAll().retry().attempts(3).exponential();
+const retry = retry(handleAll, { maxAttempts: 3, backoff: new ExponentialBackoff() });
 
 // Create a circuit breaker that'll stop calling the executed function for 10
 // seconds if it fails 5 times in a row. This can give time for e.g. a database
 // to recover without getting tons of traffic.
-const circuitBreaker = Policy.handleAll().circuitBreaker(10 * 1000, new ConsecutiveBreaker(5));
+const circuitBreaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new ConsecutiveBreaker(5),
+});
 
 // Combine these! Create a policy that retries 3 times, calling through the circuit breaker
-const retryWithBreaker = Policy.wrap(retry, circuitBreaker);
+const retryWithBreaker = wrap(retry, circuitBreaker);
 
 exports.handleRequest = async (req, res) => {
   // Call your database safely!
@@ -40,42 +51,33 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
 
 - [`IPolicy` (the shape of a policy)](#ipolicy-the-shape-of-a-policy)
 - [`Policy`](#policy)
-  - [`Policy.handleAll()`](#policyhandleall)
-  - [`Policy.handleType(ctor[, filter])`](#policyhandletypector-filter)
-  - [`policy.orType(ctor[, filter])`](#policyortypector-filter)
-  - [`Policy.handleWhen(filter)`](#policyhandlewhenfilter)
-  - [`policy.orWhen(filter)`](#policyorwhenfilter)
-  - [`Policy.handleResultType(ctor[, filter])`](#policyhandleresulttypector-filter)
-  - [`policy.orResultType(ctor[, filter])`](#policyorresulttypector-filter)
-  - [`Policy.handleWhenResult(filter)`](#policyhandlewhenresultfilter)
-  - [`policy.orWhenResult(filter)`](#policyorwhenresultfilter)
-  - [`Policy.wrap(...policies)`](#policywrappolicies)
-  - [`Policy.use(policy)`](#policyusepolicy)
-  - [`Policy.noop`](#policynoop)
-- [Backoffs](#backoffs)
-  - [ConstantBackoff](#constantbackoff)
-  - [ExponentialBackoff](#exponentialbackoff)
-  - [IterableBackoff](#iterablebackoff)
-  - [DelegateBackoff](#delegatebackoff)
-  - [CompositeBackoff](#compositebackoff)
+  - [`handleAll`](#handleall)
+  - [`handleType(ctor[, filter])` / `policy.orType(ctor[, filter])`](#handletypector-filter--policyortypector-filter)
+  - [`handleWhen(filter)` / `policy.orWhen(filter)`](#handlewhenfilter--policyorwhenfilter)
+  - [`handleResultType(ctor[, filter])` / `policy.orResultType(ctor[, filter])`](#handleresulttypector-filter--policyorresulttypector-filter)
+  - [`handleWhenResult(filter)` / `policy.orWhenResult(filter)`](#handlewhenresultfilter--policyorwhenresultfilter)
+  - [`wrap(...policies)`](#wrappolicies)
+  - [`@usePolicy(policy)`](#usepolicypolicy)
+  - [`noop`](#noop)
 - [Events](#events)
   - [`Event.toPromise(event[, signal])`](#eventtopromiseevent-signal)
   - [`Event.once(event, callback)`](#eventonceevent-callback)
-- [`Policy.retry()`](#policyretry)
+- [`retry(policy, options)`](#retrypolicy-options)
+  - [Backoffs](#backoffs)
+    - [`ConstantBackoff`](#constantbackoff)
+    - [`ExponentialBackoff`](#exponentialbackoff)
+    - [`IterableBackoff`](#iterablebackoff)
+    - [`DelegateBackoff`](#delegatebackoff)
   - [`retry.execute(fn[, signal])`](#retryexecutefn-signal)
-  - [`retry.attempts(count)`](#retryattemptscount)
-  - [`retry.delay(amount)`](#retrydelayamount)
-  - [`retry.exponential(options)`](#retryexponentialoptions)
-  - [`retry.delegate(fn)`](#retrydelegatefn)
-  - [`retry.backoff(policy)`](#retrybackoffpolicy)
   - [`retry.dangerouslyUnref()`](#retrydangerouslyunref)
   - [`retry.onRetry(callback)`](#retryonretrycallback)
   - [`retry.onSuccess(callback)`](#retryonsuccesscallback)
   - [`retry.onFailure(callback)`](#retryonfailurecallback)
   - [`retry.onGiveUp(callback)`](#retryongiveupcallback)
-- [`Policy.circuitBreaker(openAfter, breaker)`](#policycircuitbreakeropenafter-breaker)
-  - [`ConsecutiveBreaker`](#consecutivebreaker)
-  - [`SamplingBreaker`](#samplingbreaker)
+- [`circuitBreaker(policy, { halfOpenAfter, breaker })`](#circuitbreakerpolicy--halfopenafter-breaker-)
+  - [Breakers](#breakers)
+    - [`ConsecutiveBreaker`](#consecutivebreaker)
+    - [`SamplingBreaker`](#samplingbreaker)
   - [`breaker.execute(fn[, signal])`](#breakerexecutefn-signal)
   - [`breaker.state`](#breakerstate)
   - [`breaker.onBreak(callback)`](#breakeronbreakcallback)
@@ -85,20 +87,20 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`breaker.onSuccess(callback)`](#breakeronsuccesscallback)
   - [`breaker.onFailure(callback)`](#breakeronfailurecallback)
   - [`breaker.isolate()`](#breakerisolate)
-- [`Policy.timeout(duration, strategy)`](#policytimeoutduration-strategy)
+- [`timeout(duration, strategy)`](#timeoutduration-strategy)
   - [`timeout.dangerouslyUnref()`](#timeoutdangerouslyunref)
   - [`timeout.execute(fn[, signal])`](#timeoutexecutefn-signal)
   - [`timeout.onTimeout(callback)`](#timeoutontimeoutcallback)
   - [`timeout.onSuccess(callback)`](#timeoutonsuccesscallback)
   - [`timeout.onFailure(callback)`](#timeoutonfailurecallback)
-- [`Policy.bulkhead(limit[, queue])`](#policybulkheadlimit-queue)
+- [`bulkhead(limit[, queue])`](#bulkheadlimit-queue)
   - [`bulkhead.execute(fn[, signal])`](#bulkheadexecutefn-signal)
   - [`bulkhead.onReject(callback)`](#bulkheadonrejectcallback)
   - [`bulkhead.onSuccess(callback)`](#bulkheadonsuccesscallback)
   - [`bulkhead.onFailure(callback)`](#bulkheadonfailurecallback)
   - [`bulkhead.executionSlots`](#bulkheadexecutionslots)
   - [`bulkhead.queueSlots`](#bulkheadqueueslots)
-- [`Policy.fallback(valueOrFactory)`](#policyfallbackvalueorfactory)
+- [`fallback(policy, valueOrFactory)`](#fallbackpolicy-valueorfactory)
   - [`fallback.execute(fn[, signal])`](#fallbackexecutefn-signal)
   - [`fallback.onSuccess(callback)`](#fallbackonsuccesscallback)
   - [`fallback.onFailure(callback)`](#fallbackonfailurecallback)
@@ -142,63 +144,61 @@ If you don't read TypeScript often, here's what it means:
 
 The Policy defines how errors and results are handled. Everything in Cockatiel ultimately deals with handling errors or bad results. The Policy sets up how
 
-### `Policy.handleAll()`
+### `handleAll`
 
-Tells the policy to handle _all_ errors.
+A generic policy to handle _all_ errors.
 
 ```ts
-Policy.handleAll();
-// ...
+import { handleAll } from 'cockatiel';
+
+retry(handleAll /* ... */);
 ```
 
-### `Policy.handleType(ctor[, filter])`
-
-### `policy.orType(ctor[, filter])`
+### `handleType(ctor[, filter])` / `policy.orType(ctor[, filter])`
 
 Tells the policy to handle errors of the given type, passing in the contructor. If a `filter` function is also passed, we'll only handle errors if that also returns true.
 
 ```ts
-Policy.handleType(NetworkError).orType(HttpError, err => err.statusCode === 503);
+import { handleType } from 'cockatiel';
+
+handleType(NetworkError).orType(HttpError, err => err.statusCode === 503);
 // ...
 ```
 
-### `Policy.handleWhen(filter)`
-
-### `policy.orWhen(filter)`
+### `handleWhen(filter)` / `policy.orWhen(filter)`
 
 Tells the policy to handle any error for which the filter returns truthy
 
 ```ts
-Policy.handleWhen(err => err instanceof NetworkError).orWhen(err => err.shouldRetry === true);
+import { handleWhen } from 'cockatiel';
+
+handleWhen(err => err instanceof NetworkError).orWhen(err => err.shouldRetry === true);
 // ...
 ```
 
-### `Policy.handleResultType(ctor[, filter])`
-
-### `policy.orResultType(ctor[, filter])`
+### `handleResultType(ctor[, filter])` / `policy.orResultType(ctor[, filter])`
 
 Tells the policy to treat certain return values of the function as errors--retrying if they appear, for instance. Results will be retried if they're an instance of the given class. If a `filter` function is also passed, we'll only treat return values as errors if that also returns true.
 
 ```ts
-Policy.handleResultType(ReturnedNetworkError).orResultType(
-  HttpResult,
-  res => res.statusCode === 503,
-);
+import { handleResultType } from 'cockatiel';
+
+handleResultType(ReturnedNetworkError).orResultType(HttpResult, res => res.statusCode === 503);
 // ...
 ```
 
-### `Policy.handleWhenResult(filter)`
-
-### `policy.orWhenResult(filter)`
+### `handleWhenResult(filter)` / `policy.orWhenResult(filter)`
 
 Tells the policy to treat certain return values of the function as errors--retrying if they appear, for instance. Results will be retried the filter function returns true.
 
 ```ts
-Policy.handleWhenResult(res => res.statusCode === 503).orWhenResult(res => res.statusCode === 429);
+import { handleWhenResult } from 'cockatiel';
+
+handleWhenResult(res => res.statusCode === 503).orWhenResult(res => res.statusCode === 429);
 // ...
 ```
 
-### `Policy.wrap(...policies)`
+### `wrap(...policies)`
 
 Wraps the given set of policies into a single policy. For instance, this:
 
@@ -211,29 +211,33 @@ const result = await retry.execute(() =>
 Is the equivalent to:
 
 ```js
-const result = await Policy.wrap(retry, breaker, timeout).execute(({ signal }) => getData(signal));
+import { wrap } from 'cockatiel';
+
+const result = await wrap(retry, breaker, timeout).execute(({ signal }) => getData(signal));
 ```
 
-The `context` argument passed to the executed function is the merged object of all previous policies. So for instance, in the above example you'll get the abort signal from the [TimeoutPolicy](#policytimeoutduration-strategy) as well as the attempt number from the [RetryPolicy](#policyretry):
+The `context` argument passed to the executed function is the merged object of all previous policies. So for instance, in the above example you'll get the abort signal from the [TimeoutPolicy](#timeoutduration-strategy) as well as the attempt number from the [RetryPolicy](#retrypolicy-options):
 
 ```ts
-Policy.wrap(retry, breaker, timeout).execute(context => {
+import { wrap } from 'cockatiel';
+
+wrap(retry, breaker, timeout).execute(context => {
   console.log(context);
   // => { attempts: 1, cancellation: }
 });
 ```
 
-### `Policy.use(policy)`
+### `@usePolicy(policy)`
 
 A decorator that can be used to wrap class methods and apply the given policy to them. It also adds the last argument normally given in `Policy.execute` as the last argument in the function call. For example:
 
 ```ts
-import { Policy } from 'cockatiel';
+import { usePolicy, handleAll, retry } from 'cockatiel';
 
-const retry = Policy.handleAll().retry().attempts(3);
+const retry = retry(handleAll, { attempts: 3 });
 
 class Database {
-  @Policy.use(retry)
+  @usePolicy(retry)
   public getUserInfo(userId, context) {
     console.log('Retry attempt number', context.attempt);
     // implementation here
@@ -246,181 +250,18 @@ db.getUserInfo(3).then(info => console.log('User 3 info:', info));
 
 Note that it will force the return type to be a Promise, since that's what policies return.
 
-### `Policy.noop`
+### `noop`
 
 A no-op policy, which may be useful for tests and stubs.
 
 ```ts
-import { Policy } from 'cockatiel';
+import { noop, handleAll, retry } from 'cockatiel';
 
-const policy = isProduction ? Policy.handleAll().retry().attempts(3) : Policy.noop;
+const policy = isProduction ? retry(handleAll, { attempts: 3 }) : noop;
 
 export async function handleRequest() {
   return policy.execute(() => getInfoFromDatabase());
 }
-```
-
-## Backoffs
-
-Backoff algorithms are immutable. The backoff class adheres to the interface:
-
-```ts
-export interface IBackoffFactory<T> {
-  /**
-   * Returns the next backoff duration. Can return "undefined" to signal
-   * that we should stop backing off.
-   */
-  next(context: T): IBackoff<T> | undefined;
-}
-```
-
-The backoff, returned from the `next()` call, has the appropriate delay and `next()` method again.
-
-```ts
-export interface IBackoff<T> {
-  next(context: T): IBackoff<T> | undefined; // same as above
-
-  /**
-   * Returns the number of milliseconds to wait for this backoff attempt.
-   */
-  readonly duration: number;
-}
-```
-
-### ConstantBackoff
-
-A backoff that backs off for a constant amount of time, and can optionally stop after a certain number of attempts.
-
-```ts
-// Waits 50ms between back offs, forever
-const foreverBackoff = new ConstantBackoff(50);
-
-// Waits 50ms and stops backing off after three attempts.
-const limitedBackoff = new ConstantBackoff(50, 3);
-```
-
-### ExponentialBackoff
-
-> Tip: exponential backoffs and [circuit breakers](#policycircuitbreakeropenafter-breaker) are great friends!
-
-The crowd favorite. By default, it uses a decorrelated jitter algorithm, which is a good default for most applications. Takes in an options object, which can have any of these properties:
-
-```ts
-export interface IExponentialBackoffOptions<S> {
-  /**
-   * Delay generator function to use. This package provides several of these/
-   * Defaults to "decorrelatedJitterGenerator", a good default for most
-   * scenarios (see the linked Polly issue).
-   *
-   * @see https://github.com/App-vNext/Polly/issues/530
-   * @see https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
-   */
-  generator: GeneratorFn<S>;
-
-  /**
-   * Maximum delay, in milliseconds. Defaults to 30s.
-   */
-  maxDelay: number;
-
-  /**
-   * Maximum retry attempts. Defaults to Infinity.
-   */
-  maxAttempts: number;
-
-  /**
-   * Backoff exponent. Defaults to 2.
-   */
-  exponent: number;
-
-  /**
-   * The initial, first delay of the backoff, in milliseconds.
-   * Defaults to 128ms.
-   */
-  initialDelay: number;
-}
-```
-
-Example:
-
-```ts
-import { ExponentialBackoff, noJitterGenerator } from 'cockatiel';
-
-// Use all the defaults. Decorrelated jitter, 30 seconds max delay, infinite attempts:
-const defaultBackoff = new ExponentialBackoff();
-
-// Have some lower limits:
-const limitedBackoff = new ExponentialBackoff({ maxDelay: 1000, initialDelay: 4 });
-
-// Use a backoff without jitter
-const limitedBackoff = new ExponentialBackoff({ generator: noJitterGenerator });
-```
-
-Several jitter strategies are provided. This [AWS blog post](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) has more information around the strategies and why you might want to use them. The available jitter generators exported from `cockatiel` are:
-
-- `decorrelatedJitterGenerator` -- The default implementation, the one that [Polly.Contrib.WaitAndRetry uses](https://github.com/Polly-Contrib/Polly.Contrib.WaitAndRetry/tree/79224cff9670b159418f955af4d0a9ebc2a09778#new-jitter-recommendation)
-- `noJitterGenerator` -- Does not add any jitter
-- `fullJitterGenerator` -- Jitters between `[0, interval)`
-- `halfJitterGenerator` -- Jitters between `[interval / 2, interval)`
-
-### IterableBackoff
-
-Takes in a list of delays, and goes through them one by one. When it reaches the end of the list, the backoff will stop.
-
-```ts
-// Wait 100ms, 200ms, and then 500ms between attempts before giving up:
-const backoff = new IterableBackoff([100, 200, 500]);
-```
-
-### DelegateBackoff
-
-Delegates determining the backoff to the given function. The function can return a number of milliseconds to wait, or `undefined` to stop the backoff.
-
-```ts
-// Try with a 500ms delay asa long as `shouldGiveUp` is false.
-const backoff = new DelegateBackoff(context => (shouldGiveUp ? undefined : 500));
-```
-
-The first parameter is the generic `context` in which the backoff is being used. For retries, the context is an interface like this:
-
-```ts
-export interface IRetryBackoffContext<ReturnType> {
-  /**
-   * The retry attempt, starting at 1 for calls into backoffs.
-   */
-  attempt: number;
-
-  /**
-   * The result of the last method call. Either a thrown error, or a value
-   * that we determined should be retried upon.
-   */
-  result: { error: Error } | { value: ReturnType };
-}
-```
-
-You can also take in a `state` as the second parameter, and return an object containing the `{ state: S, delay: number }`. Here's both of those in action that we use to create a backoff policy that will stop backing off if we get the same error twice in a row, otherwise do an exponential backoff:
-
-```ts
-const myDelegateBackoff = new DelegateBackoff((context, lastError) => {
-  if (context.result.error && context.result.error === lastError) {
-    return undefined; // will cause the error to be thrown
-  }
-
-  return { delay: 100 * Math.pow(2, context.count), state: context.result.error };
-});
-```
-
-### CompositeBackoff
-
-A composite backoff merges two different backoffs. It will continue as long as both child backoffs also continue, and can be configured to use the delay from the first child (`a`) or second child (`b`), or the maximum (`max`) or minimum (`min`) values.
-
-Here, we'll use the delegate backoff we created above for the delay (the "A" child), and add a constant backoff which ends after 5 attempts.
-
-```ts
-const backoff = new CompositeBackoff(
-  'a',
-  myDelegateBackoff,
-  new ConstantBackoff(/* delay */ 0, /* attempts */ 5),
-);
 ```
 
 ## Events
@@ -470,85 +311,192 @@ async function waitForFallback(policy) {
 }
 ```
 
-## `Policy.retry()`
+## `retry(policy, options)`
 
-If you know how to use Polly, you already almost know how to use Cockatiel. The `Policy` object is the base builder, and you can get a RetryBuilder off of that by calling `.retry()`.
+`retry()` uses a [Policy](#Policy) to retry running something multiple times. Like other builders, you can use a retry builder between multiple calls.
 
-Here are some example:
+To use `retry()`, first pass in the [Policy](#Policy) to use, and then the options. The options are an object containing:
+
+- `maxAttempts`: the number of attempts to make before giving up
+- `backoff`: a generator that tells Cockatiel how long to wait between attempts. A number of backoff implementations are provided out of the box:
+
+  - [ConstantBackoff](#constantbackoff)
+  - [IterableBackoff](#iterablebackoff)
+  - [ExponentialBackoff](#exponentialbackoff)
+  - [DelegateBackoff](#DelegateBackoff) (advanced)
+
+Here are some examples:
 
 ```ts
-const response1 = await Policy.handleAll() // handle all errors
-  .retry() // get a RetryBuilder
-  .attempts(3) // retry three times, with no delay
-  .execute(() => getJson('https://example.com'));
+import { retry, handleAll, handleType, ExponentialBackoff } from 'cockatiel';
 
-const response1 = await Policy.handleType(NetworkError)
-  .retry()
-  .execute(() => getJson('https://example.com'));
+const response1 = await retry(
+  handleAll, // handle all errors
+  { maxAttempts: 3 }, // retry three times, with no backoff
+).execute(() => getJson('https://example.com'));
+
+const response2 = await retry(
+  handleType(NetworkError), // handle only network errors,
+  { maxAttempts: 3, backoff: new ExponentialBackoff() }, // backoff exponentially 3 times
+).execute(() => getJson('https://example.com'));
+```
+
+### Backoffs
+
+Backoff algorithms are immutable. The backoff class adheres to the interface:
+
+```ts
+export interface IBackoffFactory<T> {
+  /**
+   * Returns the next backoff duration.
+   */
+  next(context: T): IBackoff<T>;
+}
+```
+
+The backoff, returned from the `next()` call, has the appropriate delay and `next()` method again.
+
+```ts
+export interface IBackoff<T> {
+  next(context: T): IBackoff<T>; // same as above
+
+  /**
+   * Returns the number of milliseconds to wait for this backoff attempt.
+   */
+  readonly duration: number;
+}
+```
+
+#### `ConstantBackoff`
+
+A backoff that backs off for a constant amount of time.
+
+```ts
+import { ConstantBackoff } from 'cockatiel';
+
+// Waits 50ms between back offs, forever
+const foreverBackoff = new ConstantBackoff(50);
+```
+
+#### `ExponentialBackoff`
+
+> Tip: exponential backoffs and [circuit breakers](#circuitbreakerpolicy--halfopenafter-breaker-) are great friends!
+
+The crowd favorite. By default, it uses a decorrelated jitter algorithm, which is a good default for most applications. Takes in an options object, which can have any of these properties:
+
+```ts
+export interface IExponentialBackoffOptions<S> {
+  /**
+   * Delay generator function to use. This package provides several of these/
+   * Defaults to "decorrelatedJitterGenerator", a good default for most
+   * scenarios (see the linked Polly issue).
+   *
+   * @see https://github.com/App-vNext/Polly/issues/530
+   * @see https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+   */
+  generator: GeneratorFn<S>;
+
+  /**
+   * Maximum delay, in milliseconds. Defaults to 30s.
+   */
+  maxDelay: number;
+
+  /**
+   * Backoff exponent. Defaults to 2.
+   */
+  exponent: number;
+
+  /**
+   * The initial, first delay of the backoff, in milliseconds.
+   * Defaults to 128ms.
+   */
+  initialDelay: number;
+}
+```
+
+Example:
+
+```ts
+import { ExponentialBackoff, noJitterGenerator } from 'cockatiel';
+
+// Use all the defaults. Decorrelated jitter, 30 seconds max delay, infinite attempts:
+const defaultBackoff = new ExponentialBackoff();
+
+// Have some lower limits:
+const limitedBackoff = new ExponentialBackoff({ maxDelay: 1000, initialDelay: 4 });
+
+// Use a backoff without jitter
+const limitedBackoff = new ExponentialBackoff({ generator: noJitterGenerator });
+```
+
+Several jitter strategies are provided. This [AWS blog post](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) has more information around the strategies and why you might want to use them. The available jitter generators exported from `cockatiel` are:
+
+- `decorrelatedJitterGenerator` -- The default implementation, the one that [Polly.Contrib.WaitAndRetry uses](https://github.com/Polly-Contrib/Polly.Contrib.WaitAndRetry/tree/79224cff9670b159418f955af4d0a9ebc2a09778#new-jitter-recommendation)
+- `noJitterGenerator` -- Does not add any jitter
+- `fullJitterGenerator` -- Jitters between `[0, interval)`
+- `halfJitterGenerator` -- Jitters between `[interval / 2, interval)`
+
+#### `IterableBackoff`
+
+Takes in a list of delays, and goes through them one by one. When it reaches the end of the list, the backoff will continue to use the last value.
+
+```ts
+import { IterableBackoff } from 'cockatiel';
+
+// Wait 100ms, 200ms, and then 500ms between attempts:
+const backoff = new IterableBackoff([100, 200, 500]);
+```
+
+#### `DelegateBackoff`
+
+Delegates determining the backoff to the given function. The function should return a number of milliseconds to wait.
+
+```ts
+import { DelegateBackoff } from 'cockatiel';
+
+// Try with any random delay up to 500ms
+const backoff = new DelegateBackoff(context => Math.random() * 500));
+```
+
+The first parameter is the generic `context` in which the backoff is being used. For retries, the context is an interface like this:
+
+```ts
+export interface IRetryBackoffContext<ReturnType> {
+  /**
+   * The retry attempt, starting at 1 for calls into backoffs.
+   */
+  attempt: number;
+
+  /**
+   * The result of the last method call. Either a thrown error, or a value
+   * that we determined should be retried upon.
+   */
+  result: { error: Error } | { value: ReturnType };
+}
+```
+
+You can also take in a `state` as the second parameter, and return an object containing the `{ state: S, delay: number }`. Here's both of those in action that we use to create a backoff policy that will stop backing off if we get the same error twice in a row, otherwise do an exponential backoff:
+
+```ts
+import { DelegateBackoff } from 'cockatiel';
+
+const myDelegateBackoff = new DelegateBackoff((context, lastError) => {
+  if (context.result.error && context.result.error === lastError) {
+    throw context.result.error;
+  }
+
+  return { delay: 100 * Math.pow(2, context.count), state: context.result.error };
+});
 ```
 
 ### `retry.execute(fn[, signal])`
 
 Executes the function. The current retry context, containing the attempts and abort token, `{ attempt: number, signal: AbortSignal }`, is passed as the function's first argument. The function should throw, return a promise, or return a value, which get handled as configured in the Policy.
 
-If the function doesn't succeed before the backoff ceases or cancellation is requested, the last error thrown will be bubbled up, or the last result will be returned (if you used any of the `Policy.handleResult*` methods).
+If the function doesn't succeed before the backoff ceases or cancellation is requested, the last error thrown will be bubbled up, or the last result will be returned (if you used any of the `handleResult*` methods).
 
 ```ts
-await Policy.handleAll()
-  .retry()
-  .execute(() => getJson('https://example.com'));
-```
-
-### `retry.attempts(count)`
-
-Sets the maximum number of retry attempts.
-
-```ts
-Policy.handleAll().retry().attempts(3);
-```
-
-### `retry.delay(amount)`
-
-Sets the delay between retries. You can pass a single number, or a list of retry delays.
-
-```ts
-// retry 5 times, with 100ms between them
-Policy.handleAll().retry().attempts(5).delay(100);
-
-// ...
-
-// retry 3 times, increasing delays between them
-Policy.handleAll().retry().delay([100, 200, 300]);
-// ...
-```
-
-### `retry.exponential(options)`
-
-Uses an exponential backoff for retries. See [ExponentialBackoff](#exponentialbackoff) for more details around the available options.
-
-```ts
-Policy.handleAll()
-  .retry()
-  .exponential({ maxDelay: 10 * 1000, maxAttempts: 5 });
-// ...
-```
-
-### `retry.delegate(fn)`
-
-Creates a delegate backoff. See [DelegateBackoff](#DelegateBackoff) for more details here.
-
-```ts
-Policy.handleAll()
-  .retry()
-  .delegate(context => 100 * Math.pow(2, context.attempt));
-```
-
-### `retry.backoff(policy)`
-
-Uses a custom backoff strategy for retries.
-
-```ts
-Policy.handleAll().retry().backoff(myBackoff);
+await retry(handleAll, { maxAttempts: 3 }).execute(() => getJson('https://example.com'));
 ```
 
 ### `retry.dangerouslyUnref()`
@@ -556,10 +504,8 @@ Policy.handleAll().retry().backoff(myBackoff);
 When retrying, a referenced timer is created. This means the Node.js event loop is kept active while we're delaying a retried call. Calling this method on the retry builder will unreference the timer, allowing the process to exit even if a retry might still be pending:
 
 ```ts
-const response1 = await Policy.handleAll() // handle all errors
-  .retry() // get a RetryBuilder
-  .dangerouslyUnref() // unreference the timer
-  .attempts(3) // retry three times, with no delay
+const response1 = await retry(handleAll, { maxAttempts: 3 })
+  .dangerouslyUnref()
   .execute(() => getJson('https://example.com'));
 ```
 
@@ -568,7 +514,7 @@ const response1 = await Policy.handleAll() // handle all errors
 An [event emitter](#events) that fires when we retry a call, before any backoff. It's invoked with an object that includes:
 
 - the `delay` we're going to wait before retrying, and;
-- either a thrown error like `{ error: someError, delay: number }`, or an errorful result in an object like `{ value: someValue, delay: number }` when using [result filtering](#policyhandleresulttypector-filter).
+- either a thrown error like `{ error: someError, delay: number }`, or an errorful result in an object like `{ value: someValue, delay: number }` when using [result filtering](#handleresulttypector-filter--policyorresulttypector-filter).
 
 Useful for telemetry. Returns a dispable instance.
 
@@ -610,7 +556,7 @@ listener.dispose();
 
 ### `retry.onGiveUp(callback)`
 
-An [event emitter](#events) that fires when we're no longer retrying a call and are giving up. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#policyhandleresulttypector-filter). Useful for telemetry. Returns a dispable instance.
+An [event emitter](#events) that fires when we're no longer retrying a call and are giving up. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#handleresulttypector-filter--policyorresulttypector-filter). Useful for telemetry. Returns a dispable instance.
 
 ```js
 const listener = retry.onGiveUp(reason => console.log('retrying a function call:', reason));
@@ -618,7 +564,7 @@ const listener = retry.onGiveUp(reason => console.log('retrying a function call:
 listener.dispose();
 ```
 
-## `Policy.circuitBreaker(openAfter, breaker)`
+## `circuitBreaker(policy, { halfOpenAfter, breaker })`
 
 Circuit breakers stop execution for a period of time after a failure threshold has been reached. This is very useful to allow faulting systems to recover without overloading them. See the [Polly docs](https://github.com/App-vNext/Polly/wiki/Circuit-Breaker#how-the-polly-circuitbreaker-works) for more detailed information around circuit breakers.
 
@@ -629,16 +575,25 @@ To create a breaker, you use a [Policy](#Policy) like you normally would, and ca
 Calls to `execute()` while the circuit is open (not taking requests) will throw a `BrokenCircuitError`.
 
 ```js
-import { Policy, BrokenCircuitError, ConsecutiveBreaker, SamplingBreaker } from 'cockatiel';
+import {
+  circuitBreaker,
+  handleAll,
+  BrokenCircuitError,
+  ConsecutiveBreaker,
+  SamplingBreaker,
+} from 'cockatiel';
 
 // Break if more than 20% of requests fail in a 30 second time window:
-const breaker = Policy.handleAll().circuitBreaker(
-  10 * 1000,
-  new SamplingBreaker({ threshold: 0.2, duration: 30 * 1000 }),
-);
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new SamplingBreaker({ threshold: 0.2, duration: 30 * 1000 }),
+});
 
 // Break if more than 5 requests in a row fail:
-const breaker = Policy.handleAll().circuitBreaker(10 * 1000, new ConsecutiveBreaker(5));
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new ConsecutiveBreaker(5),
+});
 
 // Get info from the database, or return 'service unavailable' if it's down/recovering
 export async function handleRequest() {
@@ -654,38 +609,43 @@ export async function handleRequest() {
 }
 ```
 
-### `ConsecutiveBreaker`
+### Breakers
+
+#### `ConsecutiveBreaker`
 
 The `ConsecutiveBreaker` breaks after `n` requests in a row fail. Simple, easy.
 
 ```js
 // Break if more than 5 requests in a row fail:
-const breaker = Policy.handleAll().circuitBreaker(10 * 1000, new ConsecutiveBreaker(5));
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new ConsecutiveBreaker(5),
+});
 ```
 
-### `SamplingBreaker`
+#### `SamplingBreaker`
 
 The `SamplingBreaker` breaks after a proportion of requests over a time period fail.
 
 ```js
 // Break if more than 20% of requests fail in a 30 second time window:
-const breaker = Policy.handleAll().circuitBreaker(
-  10 * 1000,
-  new SamplingBreaker({ threshold: 0.2, duration: 30 * 1000 }),
-);
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new SamplingBreaker({ threshold: 0.2, duration: 30 * 1000 }),
+});
 ```
 
 You can specify a minimum requests-per-second value to use to avoid closing the circuit under period of low load. By default we'll choose a value such that you need 5 failures per second for the breaker to kick in, and you can configure this if it doesn't work for you:
 
 ```js
-const breaker = Policy.handleAll().circuitBreaker(
-  10 * 1000,
-  new SamplingBreaker({
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new SamplingBreaker({
     threshold: 0.2,
     duration: 30 * 1000,
     minimumRps: 10, // require 10 requests per second before we can break
   }),
-);
+});
 ```
 
 ### `breaker.execute(fn[, signal])`
@@ -796,14 +756,14 @@ const handle = breaker.isolate();
 handle.dispose();
 ```
 
-## `Policy.timeout(duration, strategy)`
+## `timeout(duration, strategy)`
 
 Creates a timeout policy. The duration specifies how long to wait before timing out `execute()`'d functions. The strategy for timeouts, "Cooperative" or "Aggressive". An [AbortSignal](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal) will be pass to any executed function, and in cooperative timeouts we'll simply wait for that function to return or throw. In aggressive timeouts, we'll immediately throw a TaskCancelledError when the timeout is reached, in addition to marking the passed token as failed.
 
 ```js
-import { TimeoutStrategy, Policy, TaskCancelledError } from 'cockatiel';
+import { TimeoutStrategy, timeout, TaskCancelledError } from 'cockatiel';
 
-const timeout = Policy.timeout(2000, TimeoutStrategy.Cooperative);
+const timeout = timeout(2000, TimeoutStrategy.Cooperative);
 
 export async function handleRequest() {
   try {
@@ -871,14 +831,14 @@ const listener = timeout.onFailure(({ duration, handled, reason }) => {
 listener.dispose();
 ```
 
-## `Policy.bulkhead(limit[, queue])`
+## `bulkhead(limit[, queue])`
 
 A Bulkhead is a simple structure that limits the number of concurrent calls. Attempting to exceed the capacity will cause `execute()` to throw a `BulkheadRejectedError`.
 
 ```js
-import { Policy } from 'cockatiel';
+import { bulkhead } from 'cockatiel';
 
-const bulkhead = Policy.bulkhead(12); // limit to 12 concurrent calls
+const bulkhead = bulkhead(12); // limit to 12 concurrent calls
 
 export async function handleRequest() {
   try {
@@ -896,7 +856,7 @@ export async function handleRequest() {
 You can optionally pass a second parameter to `bulkhead()`, which will allow for events to be queued instead of rejected after capacity is exceeded. Once again, if this queue fills up, a `BulkheadRejectedError` will be thrown.
 
 ```js
-const bulkhead = Policy.bulkhead(12, 4); // limit to 12 concurrent calls, with 4 queued up
+const bulkhead = bulkhead(12, 4); // limit to 12 concurrent calls, with 4 queued up
 ```
 
 ### `bulkhead.execute(fn[, signal])`
@@ -962,14 +922,14 @@ Returns the number of execution slots left in the bulkhead. If either this or `b
 
 Returns the number of queue slots left in the bulkhead. If either this or `bulkhead.executionSlots` is greater than zero, the `execute()` will not throw a `BulkheadRejectedError`.
 
-## `Policy.fallback(valueOrFactory)`
+## `fallback(policy, valueOrFactory)`
 
 Creates a policy that returns the `valueOrFactory` if an executed function fails. As the name suggests, `valueOrFactory` either be a value, or a function we'll call when a failure happens to create a value.
 
 ```js
-import { Policy } from 'cockatiel';
+import { handleType, fallback } from 'cockatiel';
 
-const fallback = Policy.handleType(DatabaseError).fallback(() => getStaleData());
+const fallback = fallback(handleType(DatabaseError), () => getStaleData());
 
 export function handleRequest() {
   return fallback.execute(() => getInfoFromDatabase());

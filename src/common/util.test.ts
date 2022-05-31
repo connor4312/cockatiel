@@ -11,7 +11,7 @@ export async function runInChild(code: string) {
 
   after(done => unlink(file, () => done()));
 
-  writeFileSync(file, `const { Policy } = require('./');\n${code}`);
+  writeFileSync(file, `const c = require('./');\n${code}`);
 
   const child = fork(file, [], { cwd, stdio: 'pipe' });
   const output: Buffer[] = [];

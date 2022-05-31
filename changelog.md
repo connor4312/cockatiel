@@ -1,5 +1,58 @@
 # Changelog
 
+## 3.0.0-beta.1
+
+- **breaking:** **refactor:** create policies as free-floating functions rather than Policy methods
+
+  Previously, all policies were created via something like `Policy.handleAll().retry(...)`. However, as a result, it was hard for bundlers to tree-shake Cockatiel, since the `Policy` class was used and referenced every mechanism provided in this library.
+
+  Instead, policies are now created via functions that consume the base `Policy` configuration--and that configuration is started as free functions rather than static methods. For example, where you previously wrote:
+
+  ```ts
+  import { Policy } from 'cockatiel';
+  Policy.handleAll().retry().attempts(3);
+  ```
+
+  You instead write
+
+  ```ts
+  import { handleAll, retry } from 'cockatiel';
+  retry(handleAll, { attempts: 3 );
+  ```
+
+  The full changes are:
+
+  - `Policy.retry()` -> `retry(policy, options)`
+  - `Policy.circuitBreaker(halfOpenAfter, breaker)` -> `retry(policy, { halfOpenAfter: number, breaker: IBreaker })`
+  - `Policy.fallback(valueOrFactory)` -> `fallback(policy, valueOrFactory)`
+  - `Policy.wrap(...)` -> `wrap(...)`
+  - `Policy.timeout(duration, strategy)` -> `timeout(duration, strategy)`
+  - `Policy.bulkhead(limit[, quue])` -> `bulkhead(limit[, quue])`
+  - `Policy.use()` -> `usePolicy(policy)`
+
+  This resolves [#50](https://github.com/connor4312/cockatiel/issues/50)
+
+- **breaking:** **refactor:** remove confusing Retry builder.
+
+  Previously, this package had a builder interface on `Policy.retry()...`. However, it was confusing how the different options of the builder interacted in more complex cases. For example, both the retry policy itself _and_ the backoff could have different max attempts.
+
+  We simplified it to be a simple options object given in `policy`, where the max attempts is also given. For the backoff itself, you pass the underlying backoff generator (or a custom one)
+
+  Instead of:
+
+  - `Policy.retry().attempts(2).delay(5)`, you can write `retry(policy, { maxAttempts: 2, backoff: new ConstantBackoff(5) })`
+  - `Policy.retry().delay([100, 200, 300])`, you can write `retry(policy, { maxAttempts: 3, backoff: new IterableBackoff(100, 200, 300) })`
+  - `Policy.retry().exponential(opts)`, you can write `retry(policy, { backoff: new ExponentialBackoff(opts) })`
+  - `Policy.retry().delegate(fn)`, you can write `retry(policy, { backoff: new DelegateBackoff(fn) })`
+
+  This is a little more verbose, but should be more clear to readers, and it also tree-shakes better.
+
+  As part of this, the `CompositeBackoff` has been removed. This was mostly an implementation detail of the retry builder internally, and can be better implemented as a custom function in a `DelegateBackoff` by most consumers.
+
+  This resolves [#58](https://github.com/connor4312/cockatiel/issues/58)
+
+- **fix:** TypeScript warnings when using other providers of `AbortSignal`.
+
 ## 3.0.0-beta.0
 
 - **breaking:** **refactor:** move to using native `AbortSignal` over `CancellationToken`.

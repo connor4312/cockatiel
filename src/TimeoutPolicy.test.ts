@@ -3,19 +3,19 @@ import { SinonStub, stub } from 'sinon';
 import { promisify } from 'util';
 import { runInChild } from './common/util.test';
 import { TaskCancelledError } from './errors/TaskCancelledError';
-import { Policy } from './Policy';
+import { timeout } from './Policy';
 import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
 const delay = promisify(setTimeout);
 
 describe('TimeoutPolicy', () => {
   it('works when no timeout happens', async () => {
-    const policy = Policy.timeout(1000, TimeoutStrategy.Cooperative);
+    const policy = timeout(1000, TimeoutStrategy.Cooperative);
     expect(await policy.execute(() => 42)).to.equal(42);
   });
 
   it('properly cooperatively cancels', async () => {
-    const policy = Policy.timeout(2, TimeoutStrategy.Cooperative);
+    const policy = timeout(2, TimeoutStrategy.Cooperative);
     expect(
       await policy.execute(async ({ signal }) => {
         expect(signal.aborted).to.be.false;
@@ -27,7 +27,7 @@ describe('TimeoutPolicy', () => {
   });
 
   it('properly aggressively cancels', async () => {
-    const policy = Policy.timeout(5, TimeoutStrategy.Aggressive);
+    const policy = timeout(5, TimeoutStrategy.Aggressive);
     let verified: Promise<void>;
     await expect(
       policy.execute(
@@ -47,7 +47,7 @@ describe('TimeoutPolicy', () => {
   it('does not unref by default', async () => {
     // this would timeout if the timers were referenced
     const output = await runInChild(`
-      Policy.timeout(100, 'aggressive')
+      c.timeout(100, 'aggressive')
         .execute(() => new Promise(() => {}));
     `);
 
@@ -57,7 +57,7 @@ describe('TimeoutPolicy', () => {
   it('unrefs as requested', async () => {
     // this would timeout if the timers were referenced
     const output = await runInChild(`
-      Policy.timeout(60 * 1000, 'aggressive')
+      c.timeout(60 * 1000, 'aggressive')
         .dangerouslyUnref()
         .execute(() => new Promise(() => {}));
     `);
@@ -67,7 +67,7 @@ describe('TimeoutPolicy', () => {
 
   it('links parent cancellation token', async () => {
     const parent = new AbortController();
-    await Policy.timeout(1000, TimeoutStrategy.Cooperative).execute((_, signal) => {
+    await timeout(1000, TimeoutStrategy.Cooperative).execute((_, signal) => {
       expect(signal.aborted).to.be.false;
       parent.abort();
       expect(signal.aborted).to.be.true;
@@ -76,7 +76,7 @@ describe('TimeoutPolicy', () => {
 
   it('still has own timeout if given parent', async () => {
     const parent = new AbortController();
-    await Policy.timeout(1, TimeoutStrategy.Cooperative).execute(async (_, signal) => {
+    await timeout(1, TimeoutStrategy.Cooperative).execute(async (_, signal) => {
       expect(signal.aborted).to.be.false;
       await delay(3);
       expect(signal.aborted).to.be.true;
@@ -94,8 +94,8 @@ describe('TimeoutPolicy', () => {
       onSuccess = stub();
       onFailure = stub();
       onTimeout = stub();
-      coop = Policy.timeout(2, TimeoutStrategy.Cooperative);
-      agg = Policy.timeout(2, TimeoutStrategy.Aggressive);
+      coop = timeout(2, TimeoutStrategy.Cooperative);
+      agg = timeout(2, TimeoutStrategy.Aggressive);
       for (const p of [coop, agg]) {
         p.onFailure(onFailure);
         p.onSuccess(onSuccess);

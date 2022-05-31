@@ -1,3 +1,4 @@
+import { ConstantBackoff, IBackoffFactory } from './backoff/Backoff';
 import { IBreaker } from './breaker/Breaker';
 import { BulkheadPolicy } from './BulkheadPolicy';
 import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
@@ -5,7 +6,7 @@ import { Event } from './common/Event';
 import { ExecuteWrapper } from './common/Executor';
 import { FallbackPolicy } from './FallbackPolicy';
 import { NoopPolicy } from './NoopPolicy';
-import { IRetryContext, RetryPolicy } from './RetryPolicy';
+import { IRetryBackoffContext, IRetryContext, RetryPolicy } from './RetryPolicy';
 import { ICancellationContext, TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
 type Constructor<T> = new (...args: any) => T;
@@ -103,6 +104,8 @@ type PolicyType<T> = T extends RetryPolicy
   ? IPolicy<IRetryContext, F>
   : T extends CircuitBreakerPolicy
   ? IPolicy<IRetryContext, never>
+  : T extends NoopPolicy
+  ? IPolicy<IDefaultPolicyContext, never>
   : T extends IPolicy<infer ContextType, infer ReturnType>
   ? IPolicy<ContextType, ReturnType>
   : never;
@@ -118,194 +121,7 @@ type MergePolicies<A, B> = A extends IPolicy<infer A1, infer A2>
  * breakers, retries, etc.
  */
 export class Policy {
-  /**
-   * A no-op policy, useful for unit tests and stubs.
-   */
-  public static readonly noop: IPolicy<any> = new NoopPolicy();
-
-  /**
-   * Wraps the given set of policies into a single policy. For instance, this:
-   *
-   * ```js
-   * retry.execute(() =>
-   *  breaker.execute(() =>
-   *    timeout.execute(({ cancellationToken }) => getData(cancellationToken))))
-   * ```
-   *
-   * Is the equivalent to:
-   *
-   * ```js
-   * Policy
-   *  .wrap(retry, breaker, timeout)
-   *  .execute(({ cancellationToken }) => getData(cancellationToken)));
-   * ```
-   *
-   * The `context` argument passed to the executed function is the merged object
-   * of all previous policies.
-   *
-   */
-  // The types here a certain unattrative. Ideally we could do
-  // `wrap<A, B>(p: IPolicy<A, B>): IPolicy<A, B>`, but TS doesn't narrow the
-  // types well in that scenario (unless p is explicitly typed as an IPolicy
-  // and not some implementation) and returns `IPolicy<void, unknown>` and
-  // the like. This is the best solution I've found for it.
-  public static wrap<A extends IPolicy<IDefaultPolicyContext, unknown>>(p1: A): PolicyType<A>;
-  public static wrap<
-    A extends IPolicy<IDefaultPolicyContext, unknown>,
-    B extends IPolicy<IDefaultPolicyContext, unknown>,
-  >(p1: A, p2: B): MergePolicies<PolicyType<A>, PolicyType<B>>;
-  public static wrap<
-    A extends IPolicy<IDefaultPolicyContext, unknown>,
-    B extends IPolicy<IDefaultPolicyContext, unknown>,
-    C extends IPolicy<IDefaultPolicyContext, unknown>,
-  >(p1: A, p2: B, p3: C): MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>;
-  public static wrap<
-    A extends IPolicy<IDefaultPolicyContext, unknown>,
-    B extends IPolicy<IDefaultPolicyContext, unknown>,
-    C extends IPolicy<IDefaultPolicyContext, unknown>,
-    D extends IPolicy<IDefaultPolicyContext, unknown>,
-  >(
-    p1: A,
-    p2: B,
-    p3: C,
-    p4: D,
-  ): MergePolicies<
-    PolicyType<D>,
-    MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
-  >;
-  public static wrap<
-    A extends IPolicy<IDefaultPolicyContext, unknown>,
-    B extends IPolicy<IDefaultPolicyContext, unknown>,
-    C extends IPolicy<IDefaultPolicyContext, unknown>,
-    D extends IPolicy<IDefaultPolicyContext, unknown>,
-    E extends IPolicy<IDefaultPolicyContext, unknown>,
-  >(
-    p1: A,
-    p2: B,
-    p3: C,
-    p4: D,
-    p5: E,
-  ): MergePolicies<
-    PolicyType<E>,
-    MergePolicies<
-      PolicyType<D>,
-      MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
-    >
-  >;
-  public static wrap<C extends IDefaultPolicyContext, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A>;
-  public static wrap<C extends IDefaultPolicyContext, A>(
-    ...p: Array<IPolicy<C, A>>
-  ): IPolicy<C, A> {
-    return {
-      onFailure: p[0].onFailure,
-      onSuccess: p[0].onSuccess,
-      execute<T>(fn: (context: C) => PromiseLike<T> | T, signal: AbortSignal): Promise<T | A> {
-        const run = (context: C, i: number): PromiseLike<T | A> | T | A =>
-          i === p.length
-            ? fn(context)
-            : p[i].execute(next => run({ ...context, ...next }, i + 1), context.signal);
-        return Promise.resolve(run({ signal } as C, 0));
-      },
-    };
-  }
-
-  /**
-   * Creates a bulkhead--a policy that limits the number of concurrent calls.
-   */
-  public static bulkhead(limit: number, queue: number = 0) {
-    return new BulkheadPolicy(limit, queue);
-  }
-
-  /**
-   * Creates a retry policy that handles all errors.
-   */
-  public static handleAll() {
-    return new Policy({ errorFilter: always, resultFilter: never });
-  }
-
-  /**
-   * See {@link Policy.orType} for usage.
-   */
-  public static handleType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
-    return new Policy({ errorFilter: typeFilter(cls, predicate), resultFilter: never });
-  }
-
-  /**
-   * See {@link Policy.orWhen} for usage.
-   */
-  public static handleWhen(predicate: (error: Error) => boolean) {
-    return new Policy({ errorFilter: predicate, resultFilter: never });
-  }
-  /**
-   * See {@link Policy.orResultType} for usage.
-   */
-  public static handleResultType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
-    return new Policy({ errorFilter: never, resultFilter: typeFilter(cls, predicate) });
-  }
-
-  /**
-   * See {@link Policy.orWhenResult} for usage.
-   */
-  public static handleWhenResult(predicate: (error: unknown) => boolean) {
-    return new Policy({ errorFilter: never, resultFilter: predicate });
-  }
-
-  /**
-   * Creates a timeout policy.
-   * @param duration - How long to wait before timing out execute()'d functions
-   * @param strategy - Strategy for timeouts, "Cooperative" or "Aggressive".
-   * A {@link CancellationToken} will be pass to any executed function, and in
-   * cooperative timeouts we'll simply wait for that function to return or
-   * throw. In aggressive timeouts, we'll immediately throw a
-   * {@link TaskCancelledError} when the timeout is reached, in addition to
-   * marking the passed token as failed.
-   */
-  public static timeout(duration: number, strategy: TimeoutStrategy) {
-    return new TimeoutPolicy(duration, strategy);
-  }
-
-  /**
-   * A decorator that can be used to wrap class methods and apply the given
-   * policy to them. It also adds the last argument normally given in
-   * {@link Policy.execute} as the last argument in the function call.
-   * For example:
-   *
-   * ```ts
-   * import { Policy } from 'cockatiel';
-   *
-   * const retry = Policy.handleAll().retry().attempts(3);
-   *
-   * class Database {
-   *   @Policy.use(retry)
-   *   public getUserInfo(userId, context, cancellationToken) {
-   *     console.log('Retry attempt number', context.attempt);
-   *     // implementation here
-   *   }
-   * }
-   *
-   * const db = new Database();
-   * db.getUserInfo(3).then(info => console.log('User 3 info:', info))
-   * ```
-   *
-   * Note that it will force the return type to be a Promise, since that's
-   * what policies return.
-   */
-  public static use(policy: IPolicy<IDefaultPolicyContext, never>) {
-    // tslint:disable-next-line: variable-name
-    return (_target: unknown, _key: string, descriptor: PropertyDescriptor) => {
-      const inner = descriptor.value;
-      if (typeof inner !== 'function') {
-        throw new Error(`Can only decorate functions with @cockatiel, got ${typeof inner}`);
-      }
-
-      descriptor.value = function (this: unknown, ...args: any[]) {
-        const signal = args[args.length - 1] instanceof AbortSignal ? args.pop() : undefined;
-        return policy.execute(context => inner.apply(this, [...args, context]), signal);
-      };
-    };
-  }
-
-  protected constructor(private readonly options: Readonly<IBasePolicyOptions>) {}
+  constructor(public readonly options: Readonly<IBasePolicyOptions>) {}
 
   /**
    * Allows the policy to additionally handles errors of the given type.
@@ -401,75 +217,276 @@ export class Policy {
       resultFilter: r => this.options.resultFilter(r) || filter(r),
     });
   }
+}
 
-  /**
-   * Returns a retry policy builder.
-   */
-  public retry() {
-    return new RetryPolicy(
-      {},
-      new ExecuteWrapper(this.options.errorFilter, this.options.resultFilter),
-    );
-  }
+export const noop = new NoopPolicy();
 
-  /**
-   * Returns a circuit breaker for the policy. **Important**: you should share
-   * your circuit breaker between executions of whatever function you're
-   * wrapping for it to function!
-   *
-   * ```ts
-   * import { SamplingBreaker, Policy } from 'cockatiel';
-   *
-   * // Break if more than 20% of requests fail in a 30 second time window:
-   * const breaker = Policy
-   *  .handleAll()
-   *  .circuitBreaker(10_000, new SamplingBreaker(0.2, 30 * 1000));
-   *
-   * export function handleRequest() {
-   *   return breaker.execute(() => getInfoFromDatabase());
-   * }
-   * ```
-   *
-   * @param halfOpenAfter Time after failures to try to open the circuit
-   * breaker again.
-   * @param breaker The circuit breaker to use. This package exports
-   * ConsecutiveBreaker and SamplingBreakers for you to use.
-   */
-  public circuitBreaker(halfOpenAfter: number, breaker: IBreaker) {
-    return new CircuitBreakerPolicy(
-      {
-        breaker,
-        halfOpenAfter,
-      },
-      new ExecuteWrapper(this.options.errorFilter, this.options.resultFilter),
-    );
-  }
+/**
+ * A policy that handles all errors.
+ */
+export const handleAll = new Policy({ errorFilter: always, resultFilter: never });
 
-  /**
-   * Falls back to the given value in the event of an error.
-   *
-   * ```ts
-   * import { Policy } from 'cockatiel';
-   *
-   * const fallback = Policy
-   *  .handleType(DatabaseError)
-   *  .fallback(() => getStaleData());
-   *
-   * export function handleRequest() {
-   *   return fallback.execute(() => getInfoFromDatabase());
-   * }
-   * ```
-   *
-   * @param toValue Value to fall back to, or a function that creates the
-   * value to return (any may return a promise)
-   */
-  public fallback<R>(valueOrFactory: (() => Promise<R> | R) | R) {
-    return new FallbackPolicy(
-      new ExecuteWrapper(this.options.errorFilter, this.options.resultFilter),
-      // not technically type-safe, since if they actually want to _return_
-      // a function, that gets lost here. We'll just advice in the docs to
-      // use a higher-order function if necessary.
-      (typeof valueOrFactory === 'function' ? valueOrFactory : () => valueOrFactory) as () => R,
-    );
-  }
+/**
+ * See {@link Policy.orType} for usage.
+ */
+export function handleType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
+  return new Policy({ errorFilter: typeFilter(cls, predicate), resultFilter: never });
+}
+
+/**
+ * See {@link Policy.orWhen} for usage.
+ */
+export function handleWhen(predicate: (error: Error) => boolean) {
+  return new Policy({ errorFilter: predicate, resultFilter: never });
+}
+/**
+ * See {@link Policy.orResultType} for usage.
+ */
+export function handleResultType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
+  return new Policy({ errorFilter: never, resultFilter: typeFilter(cls, predicate) });
+}
+
+/**
+ * See {@link Policy.orWhenResult} for usage.
+ */
+export function handleWhenResult(predicate: (error: unknown) => boolean) {
+  return new Policy({ errorFilter: never, resultFilter: predicate });
+}
+
+/**
+ * Creates a bulkhead--a policy that limits the number of concurrent calls.
+ */
+export function bulkhead(limit: number, queue: number = 0) {
+  return new BulkheadPolicy(limit, queue);
+}
+
+/**
+ * A decorator that can be used to wrap class methods and apply the given
+ * policy to them. It also adds the last argument normally given in
+ * {@link Policy.execute} as the last argument in the function call.
+ * For example:
+ *
+ * ```ts
+ * import { usePolicy, retry, handleAll } from 'cockatiel';
+ *
+ * const retry = retry(handleAll, { maxAttempts: 3 });
+ *
+ * class Database {
+ *   @usePolicy(retry)
+ *   public getUserInfo(userId, context, cancellationToken) {
+ *     console.log('Retry attempt number', context.attempt);
+ *     // implementation here
+ *   }
+ * }
+ *
+ * const db = new Database();
+ * db.getUserInfo(3).then(info => console.log('User 3 info:', info))
+ * ```
+ *
+ * Note that it will force the return type to be a Promise, since that's
+ * what policies return.
+ */
+export function usePolicy(policy: IPolicy<IDefaultPolicyContext, never>) {
+  // tslint:disable-next-line: variable-name
+  return (_target: unknown, _key: string, descriptor: PropertyDescriptor) => {
+    const inner = descriptor.value;
+    if (typeof inner !== 'function') {
+      throw new Error(`Can only decorate functions with @cockatiel, got ${typeof inner}`);
+    }
+
+    descriptor.value = function (this: unknown, ...args: any[]) {
+      const signal = args[args.length - 1] instanceof AbortSignal ? args.pop() : undefined;
+      return policy.execute(context => inner.apply(this, [...args, context]), signal);
+    };
+  };
+}
+
+/**
+ * Creates a timeout policy.
+ * @param duration - How long to wait before timing out execute()'d functions
+ * @param strategy - Strategy for timeouts, "Cooperative" or "Aggressive".
+ * A {@link CancellationToken} will be pass to any executed function, and in
+ * cooperative timeouts we'll simply wait for that function to return or
+ * throw. In aggressive timeouts, we'll immediately throw a
+ * {@link TaskCancelledError} when the timeout is reached, in addition to
+ * marking the passed token as failed.
+ */
+export function timeout(duration: number, strategy: TimeoutStrategy) {
+  return new TimeoutPolicy(duration, strategy);
+}
+
+/**
+ * Wraps the given set of policies into a single policy. For instance, this:
+ *
+ * ```js
+ * retry.execute(() =>
+ *  breaker.execute(() =>
+ *    timeout.execute(({ cancellationToken }) => getData(cancellationToken))))
+ * ```
+ *
+ * Is the equivalent to:
+ *
+ * ```js
+ * Policy
+ *  .wrap(retry, breaker, timeout)
+ *  .execute(({ cancellationToken }) => getData(cancellationToken)));
+ * ```
+ *
+ * The `context` argument passed to the executed function is the merged object
+ * of all previous policies.
+ *
+ */
+// The types here a certain unattrative. Ideally we could do
+// `wrap<A, B>(p: IPolicy<A, B>): IPolicy<A, B>`, but TS doesn't narrow the
+// types well in that scenario (unless p is explicitly typed as an IPolicy
+// and not some implementation) and returns `IPolicy<void, unknown>` and
+// the like. This is the best solution I've found for it.
+export function wrap<A extends IPolicy<IDefaultPolicyContext, unknown>>(p1: A): PolicyType<A>;
+export function wrap<
+  A extends IPolicy<IDefaultPolicyContext, unknown>,
+  B extends IPolicy<IDefaultPolicyContext, unknown>,
+>(p1: A, p2: B): MergePolicies<PolicyType<A>, PolicyType<B>>;
+export function wrap<
+  A extends IPolicy<IDefaultPolicyContext, unknown>,
+  B extends IPolicy<IDefaultPolicyContext, unknown>,
+  C extends IPolicy<IDefaultPolicyContext, unknown>,
+>(p1: A, p2: B, p3: C): MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>;
+export function wrap<
+  A extends IPolicy<IDefaultPolicyContext, unknown>,
+  B extends IPolicy<IDefaultPolicyContext, unknown>,
+  C extends IPolicy<IDefaultPolicyContext, unknown>,
+  D extends IPolicy<IDefaultPolicyContext, unknown>,
+>(
+  p1: A,
+  p2: B,
+  p3: C,
+  p4: D,
+): MergePolicies<
+  PolicyType<D>,
+  MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
+>;
+export function wrap<
+  A extends IPolicy<IDefaultPolicyContext, unknown>,
+  B extends IPolicy<IDefaultPolicyContext, unknown>,
+  C extends IPolicy<IDefaultPolicyContext, unknown>,
+  D extends IPolicy<IDefaultPolicyContext, unknown>,
+  E extends IPolicy<IDefaultPolicyContext, unknown>,
+>(
+  p1: A,
+  p2: B,
+  p3: C,
+  p4: D,
+  p5: E,
+): MergePolicies<
+  PolicyType<E>,
+  MergePolicies<
+    PolicyType<D>,
+    MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
+  >
+>;
+export function wrap<C extends IDefaultPolicyContext, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A>;
+export function wrap<C extends IDefaultPolicyContext, A>(
+  ...p: Array<IPolicy<C, A>>
+): IPolicy<C, A> {
+  return {
+    onFailure: p[0].onFailure,
+    onSuccess: p[0].onSuccess,
+    execute<T>(fn: (context: C) => PromiseLike<T> | T, signal: AbortSignal): Promise<T | A> {
+      const run = (context: C, i: number): PromiseLike<T | A> | T | A =>
+        i === p.length
+          ? fn(context)
+          : p[i].execute(next => run({ ...context, ...next }, i + 1), context.signal);
+      return Promise.resolve(run({ signal } as C, 0));
+    },
+  };
+}
+
+/**
+ * Creates a retry policy. The options should contain the backoff strategy to
+ * use. Included strategies are:
+ *  - {@link ConstantBackoff}
+ *  - {@link ExponentialBackoff}
+ *  - {@link IterableBackoff}
+ *  - {@link DelegateBackoff} (advanced)
+ *
+ * For example:
+ *
+ * ```
+ * import { handleAll, retry } from 'cockatiel';
+ *
+ * const policy = retry(handleAll, { backoff: new ExponentialBackoff() });
+ * ```
+ *
+ * You can optionally pass in the `attempts` to limit the maximum number of
+ * retry attempts per call.
+ */
+export function retry(
+  policy: Policy,
+  opts: {
+    maxAttempts?: number;
+    backoff?: IBackoffFactory<IRetryBackoffContext<unknown>>;
+  },
+) {
+  return new RetryPolicy(
+    { backoff: opts.backoff || new ConstantBackoff(0), maxAttempts: opts.maxAttempts ?? Infinity },
+    new ExecuteWrapper(policy.options.errorFilter, policy.options.resultFilter),
+  );
+}
+
+/**
+ * Returns a circuit breaker for the policy. **Important**: you should share
+ * your circuit breaker between executions of whatever function you're
+ * wrapping for it to function!
+ *
+ * ```ts
+ * import { SamplingBreaker, Policy } from 'cockatiel';
+ *
+ * // Break if more than 20% of requests fail in a 30 second time window:
+ * const breaker = Policy
+ *  .handleAll()
+ *  .circuitBreaker(10_000, new SamplingBreaker(0.2, 30 * 1000));
+ *
+ * export function handleRequest() {
+ *   return breaker.execute(() => getInfoFromDatabase());
+ * }
+ * ```
+ *
+ * @param halfOpenAfter Time after failures to try to open the circuit
+ * breaker again.
+ * @param breaker The circuit breaker to use. This package exports
+ * ConsecutiveBreaker and SamplingBreakers for you to use.
+ */
+export function circuitBreaker(policy: Policy, opts: { halfOpenAfter: number; breaker: IBreaker }) {
+  return new CircuitBreakerPolicy(
+    opts,
+    new ExecuteWrapper(policy.options.errorFilter, policy.options.resultFilter),
+  );
+}
+
+/**
+ * Falls back to the given value in the event of an error.
+ *
+ * ```ts
+ * import { Policy } from 'cockatiel';
+ *
+ * const fallback = Policy
+ *  .handleType(DatabaseError)
+ *  .fallback(() => getStaleData());
+ *
+ * export function handleRequest() {
+ *   return fallback.execute(() => getInfoFromDatabase());
+ * }
+ * ```
+ *
+ * @param toValue Value to fall back to, or a function that creates the
+ * value to return (any may return a promise)
+ */
+export function fallback<R>(policy: Policy, valueOrFactory: (() => Promise<R> | R) | R) {
+  return new FallbackPolicy(
+    new ExecuteWrapper(policy.options.errorFilter, policy.options.resultFilter),
+    // not technically type-safe, since if they actually want to _return_
+    // a function, that gets lost here. We'll just advice in the docs to
+    // use a higher-order function if necessary.
+    (typeof valueOrFactory === 'function' ? valueOrFactory : () => valueOrFactory) as () => R,
+  );
 }

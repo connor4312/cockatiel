@@ -16,5 +16,7 @@ export class IterableBackoff implements IBackoffFactory<unknown> {
 
 const instance = (durations: ReadonlyArray<number>, index: number): IBackoff<unknown> => ({
   duration: durations[index],
-  next: () => (index < durations.length - 1 ? instance(durations, index + 1) : undefined),
+  next() {
+    return index === durations.length - 1 ? this : instance(durations, index + 1);
+  },
 });
