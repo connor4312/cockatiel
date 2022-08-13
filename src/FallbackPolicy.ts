@@ -3,6 +3,8 @@ import { ExecuteWrapper } from './common/Executor';
 import { IDefaultPolicyContext, IPolicy } from './Policy';
 
 export class FallbackPolicy<AltReturn> implements IPolicy<IDefaultPolicyContext, AltReturn> {
+  declare readonly _altReturn: AltReturn;
+
   /**
    * @inheritdoc
    */

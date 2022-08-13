@@ -17,6 +17,8 @@ interface IQueueItem<T> {
  * Bulkhead limits concurrent requests made.
  */
 export class BulkheadPolicy implements IPolicy {
+  declare readonly _altReturn: never;
+
   private active = 0;
   private readonly queue: Array<IQueueItem<unknown>> = [];
   private readonly onRejectEmitter = new EventEmitter<void>();

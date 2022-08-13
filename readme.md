@@ -227,6 +227,8 @@ wrap(retry, breaker, timeout).execute(context => {
 });
 ```
 
+The individual wrapped policies are accessible on the `policies` property of the policy returned from `wrap()`.
+
 ### `@usePolicy(policy)`
 
 A decorator that can be used to wrap class methods and apply the given policy to them. It also adds the last argument normally given in `Policy.execute` as the last argument in the function call. For example:

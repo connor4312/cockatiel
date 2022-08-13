@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.0
+
+- **breaking:** please see the breaking changes for the two 3.0.0-beta releases
+- **feat:** expose `wrap()`ed policies in the merged policy ([#61](https://github.com/connor4312/cockatiel/issues/61))
+
 ## 3.0.0-beta.1
 
 - **breaking:** **refactor:** create policies as free-floating functions rather than Policy methods

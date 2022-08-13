@@ -42,6 +42,8 @@ type InnerState =
   | { value: CircuitState.HalfOpen; test: Promise<any> };
 
 export class CircuitBreakerPolicy implements IPolicy {
+  declare readonly _altReturn: never;
+
   private readonly breakEmitter = new EventEmitter<FailureReason<unknown> | { isolated: true }>();
   private readonly resetEmitter = new EventEmitter<void>();
   private readonly halfOpenEmitter = new EventEmitter<void>();

@@ -40,13 +40,16 @@ describe('Policy', () => {
   });
 
   it('wraps and keeps correct types', async () => {
-    const policy = wrap(
+    const policies = [
       retry(handleAll, { maxAttempts: 2 }),
       circuitBreaker(handleAll, { halfOpenAfter: 100, breaker: new ConsecutiveBreaker(2) }),
       fallback(handleAll, 'foo'),
       timeout(1000, TimeoutStrategy.Aggressive),
       noop,
-    );
+    ] as const;
+    const policy = wrap(...policies);
+
+    expect(policy.wrapped).to.deep.equal(policies);
 
     const result = await policy.execute(context => {
       expect(context.signal).to.be.an.instanceOf(AbortSignal);

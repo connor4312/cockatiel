@@ -6,8 +6,8 @@ import { Event } from './common/Event';
 import { ExecuteWrapper } from './common/Executor';
 import { FallbackPolicy } from './FallbackPolicy';
 import { NoopPolicy } from './NoopPolicy';
-import { IRetryBackoffContext, IRetryContext, RetryPolicy } from './RetryPolicy';
-import { ICancellationContext, TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
+import { IRetryBackoffContext, RetryPolicy } from './RetryPolicy';
+import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
 type Constructor<T> = new (...args: any) => T;
 
@@ -75,6 +75,12 @@ export interface IPolicy<
   AltReturn = never,
 > {
   /**
+   * Virtual property only used for TypeScript--will not actually be defined.
+   * @deprecated This property does not exist
+   */
+  readonly _altReturn: AltReturn;
+
+  /**
    * Fires on the policy when a request successfully completes and some
    * successful value will be returned. In a retry policy, this is fired once
    * even if the request took multiple retries to succeed.
@@ -96,23 +102,18 @@ export interface IPolicy<
   ): Promise<T | AltReturn>;
 }
 
-type PolicyType<T> = T extends RetryPolicy
-  ? IPolicy<IRetryContext, never>
-  : T extends TimeoutPolicy
-  ? IPolicy<ICancellationContext, never>
-  : T extends FallbackPolicy<infer F>
-  ? IPolicy<IRetryContext, F>
-  : T extends CircuitBreakerPolicy
-  ? IPolicy<IRetryContext, never>
-  : T extends NoopPolicy
-  ? IPolicy<IDefaultPolicyContext, never>
-  : T extends IPolicy<infer ContextType, infer ReturnType>
-  ? IPolicy<ContextType, ReturnType>
-  : never;
+export interface IMergedPolicy<A extends IDefaultPolicyContext, B, W extends IPolicy<any, any>[]>
+  extends IPolicy<A, B> {
+  readonly wrapped: W;
+}
 
-type MergePolicies<A, B> = A extends IPolicy<infer A1, infer A2>
-  ? B extends IPolicy<infer B1, infer B2>
-    ? IPolicy<A1 & B1, A2 | B2>
+type MergePolicies<A, B> = A extends IPolicy<infer A1, any>
+  ? B extends IPolicy<infer B1, any>
+    ? IMergedPolicy<
+        A1 & B1,
+        A['_altReturn'] | B['_altReturn'],
+        B extends IMergedPolicy<any, any, infer W> ? [A, ...W] : [A, B]
+      >
     : never
   : never;
 
@@ -341,30 +342,22 @@ export function timeout(duration: number, strategy: TimeoutStrategy) {
 // types well in that scenario (unless p is explicitly typed as an IPolicy
 // and not some implementation) and returns `IPolicy<void, unknown>` and
 // the like. This is the best solution I've found for it.
-export function wrap<A extends IPolicy<IDefaultPolicyContext, unknown>>(p1: A): PolicyType<A>;
+export function wrap<A extends IPolicy<IDefaultPolicyContext, unknown>>(p1: A): A;
 export function wrap<
   A extends IPolicy<IDefaultPolicyContext, unknown>,
   B extends IPolicy<IDefaultPolicyContext, unknown>,
->(p1: A, p2: B): MergePolicies<PolicyType<A>, PolicyType<B>>;
+>(p1: A, p2: B): MergePolicies<A, B>;
 export function wrap<
   A extends IPolicy<IDefaultPolicyContext, unknown>,
   B extends IPolicy<IDefaultPolicyContext, unknown>,
   C extends IPolicy<IDefaultPolicyContext, unknown>,
->(p1: A, p2: B, p3: C): MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>;
+>(p1: A, p2: B, p3: C): MergePolicies<C, MergePolicies<A, B>>;
 export function wrap<
   A extends IPolicy<IDefaultPolicyContext, unknown>,
   B extends IPolicy<IDefaultPolicyContext, unknown>,
   C extends IPolicy<IDefaultPolicyContext, unknown>,
   D extends IPolicy<IDefaultPolicyContext, unknown>,
->(
-  p1: A,
-  p2: B,
-  p3: C,
-  p4: D,
-): MergePolicies<
-  PolicyType<D>,
-  MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
->;
+>(p1: A, p2: B, p3: C, p4: D): MergePolicies<D, MergePolicies<C, MergePolicies<A, B>>>;
 export function wrap<
   A extends IPolicy<IDefaultPolicyContext, unknown>,
   B extends IPolicy<IDefaultPolicyContext, unknown>,
@@ -377,20 +370,16 @@ export function wrap<
   p3: C,
   p4: D,
   p5: E,
-): MergePolicies<
-  PolicyType<E>,
-  MergePolicies<
-    PolicyType<D>,
-    MergePolicies<PolicyType<C>, MergePolicies<PolicyType<A>, PolicyType<B>>>
-  >
->;
+): MergePolicies<E, MergePolicies<D, MergePolicies<C, MergePolicies<A, B>>>>;
 export function wrap<C extends IDefaultPolicyContext, A>(...p: Array<IPolicy<C, A>>): IPolicy<C, A>;
 export function wrap<C extends IDefaultPolicyContext, A>(
   ...p: Array<IPolicy<C, A>>
-): IPolicy<C, A> {
+): IMergedPolicy<C, A, IPolicy<C, A>[]> {
   return {
+    _altReturn: undefined as any,
     onFailure: p[0].onFailure,
     onSuccess: p[0].onSuccess,
+    wrapped: p,
     execute<T>(fn: (context: C) => PromiseLike<T> | T, signal: AbortSignal): Promise<T | A> {
       const run = (context: C, i: number): PromiseLike<T | A> | T | A =>
         i === p.length

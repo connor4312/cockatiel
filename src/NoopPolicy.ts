@@ -6,6 +6,8 @@ import { IDefaultPolicyContext, IPolicy } from './Policy';
  * A no-op policy, useful for unit tests and stubs.
  */
 export class NoopPolicy implements IPolicy {
+  declare readonly _altReturn: never;
+
   private readonly executor = new ExecuteWrapper();
 
   // tslint:disable-next-line: member-ordering
