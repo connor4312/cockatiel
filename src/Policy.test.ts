@@ -21,7 +21,6 @@ class MyError1 extends Error {}
 class MyError2 extends Error {}
 class MyError3 extends Error {}
 
-// tslint:disable-next-line: variable-name
 const assertNever = (_value: never) => {
   throw new Error('unreachable');
 };

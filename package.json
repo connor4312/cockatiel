@@ -10,13 +10,12 @@
   "sideEffects": false,
   "scripts": {
     "prepublishOnly": "npm run compile",
-    "test": "rimraf dist && tsc && npm run test:unit && npm run test:lint && npm run test:fmt && npm run test:md",
+    "test": "rimraf dist && tsc && npm run test:unit && npm run test:fmt && npm run test:md",
     "test:cover": "rimraf dist && tsc && nyc npm run test:unit",
     "test:unit": "mocha",
-    "test:lint": "tslint -p tsconfig.json",
     "test:fmt": "prettier --list-different \"src/**/*.ts\" \"*.md\"",
     "test:md": "remark -f readme.md -q",
-    "fmt": "remark readme.md -f -o readme.md && prettier --write \"src/**/*.ts\" \"*.md\" && npm run test:lint -- --fix",
+    "fmt": "remark readme.md -f -o readme.md && prettier --write \"src/**/*.ts\" \"*.md\"",
     "compile": "rimraf dist && tsc && tsc -p tsconfig.esm.json",
     "watch": "rimraf dist && tsc --watch"
   },
@@ -81,9 +80,7 @@
     "sinon": "^14.0.0",
     "sinon-chai": "^3.7.0",
     "source-map-support": "^0.5.21",
-    "tslint": "^5.20.1",
-    "tslint-config-prettier": "^1.18.0",
-    "typescript": "^4.7.2"
+    "typescript": "^4.7.4"
   },
   "prettier": {
     "printWidth": 100,

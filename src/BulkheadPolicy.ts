@@ -17,7 +17,7 @@ interface IQueueItem<T> {
  * Bulkhead limits concurrent requests made.
  */
 export class BulkheadPolicy implements IPolicy {
-  declare readonly _altReturn: never;
+  public declare readonly _altReturn: never;
 
   private active = 0;
   private readonly queue: Array<IQueueItem<unknown>> = [];
@@ -27,19 +27,16 @@ export class BulkheadPolicy implements IPolicy {
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onSuccess = this.executor.onSuccess;
 
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onFailure = this.executor.onFailure;
 
   /**
    * Emitter that fires when an item is rejected from the bulkhead.
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onReject = this.onRejectEmitter.addListener;
 
   /**

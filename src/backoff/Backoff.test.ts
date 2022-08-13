@@ -8,7 +8,6 @@ export const expectDurations = <T>(
 ) => {
   const actual: Array<number | undefined> = [];
   let backoff = backoffFactory?.next(context as T);
-  // tslint:disable-next-line: prefer-for-of
   for (let i = 0; i < expected.length; i++) {
     if (!backoff) {
       actual.push(undefined);

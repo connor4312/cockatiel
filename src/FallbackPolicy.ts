@@ -8,13 +8,11 @@ export class FallbackPolicy<AltReturn> implements IPolicy<IDefaultPolicyContext,
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onSuccess = this.executor.onSuccess;
 
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onFailure = this.executor.onFailure;
 
   constructor(private readonly executor: ExecuteWrapper, private readonly value: () => AltReturn) {}

@@ -54,26 +54,22 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onSuccess = this.executor.onSuccess;
 
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onFailure = this.executor.onFailure;
 
   /**
    * Emitter that fires when we retry a call, before any backoff.
    *
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onRetry = this.onRetryEmitter.addListener;
 
   /**
    * Emitter that fires when we're no longer retrying a call and are giving up.
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onGiveUp = this.onGiveUpEmitter.addListener;
 
   constructor(

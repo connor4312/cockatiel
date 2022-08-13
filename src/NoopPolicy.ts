@@ -7,13 +7,8 @@ import { IDefaultPolicyContext, IPolicy } from './Policy';
  */
 export class NoopPolicy implements IPolicy {
   declare readonly _altReturn: never;
-
   private readonly executor = new ExecuteWrapper();
-
-  // tslint:disable-next-line: member-ordering
   public readonly onSuccess = this.executor.onSuccess;
-
-  // tslint:disable-next-line: member-ordering
   public readonly onFailure = this.executor.onFailure;
 
   public async execute<T>(

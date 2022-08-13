@@ -30,9 +30,7 @@ const makeStopwatch = () => {
 export class ExecuteWrapper {
   private readonly successEmitter = new EventEmitter<ISuccessEvent>();
   private readonly failureEmitter = new EventEmitter<IFailureEvent>();
-  // tslint:disable-next-line: member-ordering
   public readonly onSuccess = this.successEmitter.addListener;
-  // tslint:disable-next-line: member-ordering
   public readonly onFailure = this.failureEmitter.addListener;
 
   constructor(

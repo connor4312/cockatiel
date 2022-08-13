@@ -54,38 +54,32 @@ export class CircuitBreakerPolicy implements IPolicy {
   /**
    * Event emitted when the circuit breaker opens.
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onBreak = this.breakEmitter.addListener;
 
   /**
    * Event emitted when the circuit breaker resets.
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onReset = this.resetEmitter.addListener;
 
   /**
    * Event emitted when the circuit breaker is half open (running a test call).
    * Either `onBreak` on `onReset` will subsequently fire.
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onHalfOpen = this.halfOpenEmitter.addListener;
 
   /**
    * Fired whenever the circuit breaker state changes.
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onStateChange = this.stateChangeEmitter.addListener;
 
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onSuccess = this.executor.onSuccess;
 
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onFailure = this.executor.onFailure;
 
   /**

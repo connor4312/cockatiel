@@ -288,7 +288,6 @@ export function bulkhead(limit: number, queue: number = 0) {
  * what policies return.
  */
 export function usePolicy(policy: IPolicy<IDefaultPolicyContext, never>) {
-  // tslint:disable-next-line: variable-name
   return (_target: unknown, _key: string, descriptor: PropertyDescriptor) => {
     const inner = descriptor.value;
     if (typeof inner !== 'function') {

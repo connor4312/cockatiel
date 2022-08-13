@@ -29,19 +29,16 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onTimeout = this.timeoutEmitter.addListener;
 
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onFailure = this.executor.onFailure;
 
   /**
    * @inheritdoc
    */
-  // tslint:disable-next-line: member-ordering
   public readonly onSuccess = this.executor.onSuccess;
 
   constructor(

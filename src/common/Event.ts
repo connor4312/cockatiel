@@ -14,7 +14,6 @@ export const noopDisposable = { dispose: () => undefined };
  */
 export type Event<T> = (listener: (data: T) => void) => IDisposable;
 
-// tslint:disable-next-line: no-namespace
 export namespace Event {
   /**
    * Adds a handler that handles one event on the emitter.
