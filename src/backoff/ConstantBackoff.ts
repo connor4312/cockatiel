@@ -1,9 +1,9 @@
 import { IBackoff, IBackoffFactory } from './Backoff';
 
-/**
- * Backoff that returns a constant interval.
- */
 export class ConstantBackoff implements IBackoffFactory<unknown> {
+  /**
+   * Backoff that returns a constant interval.
+   */
   constructor(private readonly interval: number) {}
 
   /**

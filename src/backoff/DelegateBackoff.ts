@@ -5,12 +5,12 @@ export type DelegateBackoffFn<T, S = void> = (
   state?: S,
 ) => { delay: number; state: S } | number;
 
-/**
- * Backoff that delegates to a user-provided function. The function takes
- * the backoff context, and can optionally take (and return) a state value
- * that will be passed into subsequent backoff requests.
- */
 export class DelegateBackoff<T, S = void> implements IBackoffFactory<T> {
+  /**
+   * Backoff that delegates to a user-provided function. The function takes
+   * the backoff context, and can optionally take (and return) a state value
+   * that will be passed into subsequent backoff requests.
+   */
   constructor(private readonly fn: DelegateBackoffFn<T, S>) {}
 
   /**

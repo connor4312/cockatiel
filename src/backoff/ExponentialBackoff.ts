@@ -39,12 +39,12 @@ const defaultOptions: IExponentialBackoffOptions<any> = {
   initialDelay: 128,
 };
 
-/**
- * An implementation of exponential backoff.
- */
 export class ExponentialBackoff<S> implements IBackoffFactory<unknown> {
   private readonly options: IExponentialBackoffOptions<S>;
 
+  /**
+   * An implementation of exponential backoff.
+   */
   constructor(options?: Partial<IExponentialBackoffOptions<S>>) {
     this.options = options ? { ...defaultOptions, ...options } : defaultOptions;
   }

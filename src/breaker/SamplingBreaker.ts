@@ -26,11 +26,6 @@ export interface ISamplingBreakerOptions {
   minimumRps?: number;
 }
 
-/**
- * SamplingBreaker breaks if more than `threshold` percentage of calls over the
- * last `samplingDuration`, so long as there's at least `minimumRps` (to avoid
- * closing unnecessarily under low RPS).
- */
 export class SamplingBreaker implements IBreaker {
   private readonly threshold: number;
   private readonly minimumRpms: number;
@@ -42,6 +37,11 @@ export class SamplingBreaker implements IBreaker {
   private currentFailures = 0;
   private currentSuccesses = 0;
 
+  /**
+   * SamplingBreaker breaks if more than `threshold` percentage of calls over the
+   * last `samplingDuration`, so long as there's at least `minimumRps` (to avoid
+   * closing unnecessarily under low RPS).
+   */
   constructor({ threshold, duration: samplingDuration, minimumRps }: ISamplingBreakerOptions) {
     if (threshold <= 0 || threshold >= 1) {
       throw new RangeError(`SamplingBreaker threshold should be between (0, 1), got ${threshold}`);

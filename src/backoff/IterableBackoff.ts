@@ -1,9 +1,9 @@
 import { IBackoff, IBackoffFactory } from './Backoff';
 
-/**
- * Backoff that returns a number from an iterable.
- */
 export class IterableBackoff implements IBackoffFactory<unknown> {
+  /**
+   * Backoff that returns a number from an iterable.
+   */
   constructor(private readonly durations: ReadonlyArray<number>) {}
 
   /**

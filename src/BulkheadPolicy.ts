@@ -13,9 +13,6 @@ interface IQueueItem<T> {
   reject(error: Error): void;
 }
 
-/**
- * Bulkhead limits concurrent requests made.
- */
 export class BulkheadPolicy implements IPolicy {
   public declare readonly _altReturn: never;
 
@@ -53,6 +50,9 @@ export class BulkheadPolicy implements IPolicy {
     return this.queueCapacity - this.queue.length;
   }
 
+  /**
+   * Bulkhead limits concurrent requests made.
+   */
   constructor(private readonly capacity: number, private readonly queueCapacity: number) {}
 
   /**

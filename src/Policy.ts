@@ -117,11 +117,11 @@ type MergePolicies<A, B> = A extends IPolicy<infer A1, any>
     : never
   : never;
 
-/**
- * Factory that builds a base set of filters that can be used in circuit
- * breakers, retries, etc.
- */
 export class Policy {
+  /**
+   * Factory that builds a base set of filters that can be used in circuit
+   * breakers, retries, etc.
+   */
   constructor(public readonly options: Readonly<IBasePolicyOptions>) {}
 
   /**

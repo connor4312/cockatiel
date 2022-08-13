@@ -1,12 +1,12 @@
 import { IBreaker } from './Breaker';
 
-/**
- * ConsecutiveBreaker breaks if more than `threshold` exceptions are received
- * over a time period.
- */
 export class ConsecutiveBreaker implements IBreaker {
   private count = 0;
 
+  /**
+   * ConsecutiveBreaker breaks if more than `threshold` exceptions are received
+   * over a time period.
+   */
   constructor(private readonly threshold: number) {}
 
   /**
