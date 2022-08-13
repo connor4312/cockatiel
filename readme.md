@@ -4,11 +4,9 @@
 [![npm bundle size](https://img.shields.io/bundlephobia/minzip/cockatiel)](https://bundlephobia.com/result?p=cockatiel@0.1.0)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-success)
 
-> This is documentation for the 3.0 beta version. For docs on 2.0, please [go here](https://github.com/connor4312/cockatiel/blob/v2.0.2/readme.md).
-
 Cockatiel is resilience and transient-fault-handling library that allows developers to express policies such as Retry, Circuit Breaker, Timeout, Bulkhead Isolation, and Fallback. .NET has [Polly](https://github.com/App-vNext/Polly), a wonderful one-stop shop for all your fault handling needs--I missed having such a library for my JavaScript projects, and grew tired of copy-pasting retry logic between my projects. Hence, this module!
 
-    npm install --save cockatiel@3.0.0-beta.1
+    npm install --save cockatiel
 
 Then go forth with confidence:
 
