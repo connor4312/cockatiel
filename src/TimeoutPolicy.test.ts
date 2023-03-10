@@ -83,6 +83,24 @@ describe('TimeoutPolicy', () => {
     }, parent.signal);
   });
 
+  it('aborts on return by default', async () => {
+    let signal: AbortSignal;
+    await timeout(1, TimeoutStrategy.Cooperative).execute(async (_, s) => {
+      signal = s;
+    });
+    expect(signal!.aborted).to.be.true;
+  });
+
+  it('does not aborts on return if requested', async () => {
+    let signal: AbortSignal;
+    await timeout(1, { strategy: TimeoutStrategy.Aggressive, abortOnReturn: false }).execute(
+      async (_, s) => {
+        signal = s;
+      },
+    );
+    expect(signal!.aborted).to.be.false;
+  });
+
   describe('events', () => {
     let onSuccess: SinonStub;
     let onFailure: SinonStub;

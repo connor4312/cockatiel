@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.0
+
+- **feat:** add new option `abortOnReturn` to timeouts ([#72](https://github.com/connor4312/cockatiel/issues/72))
+
 ## 3.0.0
 
 - **breaking:** please see the breaking changes for the two 3.0.0-beta releases

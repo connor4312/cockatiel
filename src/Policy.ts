@@ -311,8 +311,14 @@ export function usePolicy(policy: IPolicy<IDefaultPolicyContext, never>) {
  * {@link TaskCancelledError} when the timeout is reached, in addition to
  * marking the passed token as failed.
  */
-export function timeout(duration: number, strategy: TimeoutStrategy) {
-  return new TimeoutPolicy(duration, strategy);
+export function timeout(
+  duration: number,
+  strategyOrOpts: TimeoutStrategy | { strategy: TimeoutStrategy; abortOnReturn: boolean },
+) {
+  return new TimeoutPolicy(
+    duration,
+    typeof strategyOrOpts === 'string' ? { strategy: strategyOrOpts } : strategyOrOpts,
+  );
 }
 
 /**

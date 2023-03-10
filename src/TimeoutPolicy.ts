@@ -21,6 +21,16 @@ export interface ICancellationContext {
   signal: AbortSignal;
 }
 
+export interface ITimeoutOptions {
+  /** Strategy for timeouts, "Cooperative", or "Accessive" */
+  strategy: TimeoutStrategy;
+  /**
+   * Whether the AbortSignal should be aborted when the
+   * function returns. Defaults to true.
+   */
+  abortOnReturn?: boolean;
+}
+
 export class TimeoutPolicy implements IPolicy<ICancellationContext> {
   declare readonly _altReturn: never;
 
@@ -43,7 +53,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
 
   constructor(
     private readonly duration: number,
-    private readonly strategy: TimeoutStrategy,
+    private readonly options: ITimeoutOptions,
     private readonly executor = new ExecuteWrapper(),
     private readonly unref = false,
   ) {}
@@ -56,7 +66,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
    * timeout might still be happening.
    */
   public dangerouslyUnref() {
-    const t = new TimeoutPolicy(this.duration, this.strategy, this.executor, true);
+    const t = new TimeoutPolicy(this.duration, this.options, this.executor, true);
     return t;
   }
 
@@ -81,7 +91,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
     const onCancelledListener = onceAborted(() => this.timeoutEmitter.emit());
 
     try {
-      if (this.strategy === TimeoutStrategy.Cooperative) {
+      if (this.options.strategy === TimeoutStrategy.Cooperative) {
         return returnOrThrow(await this.executor.invoke(fn, context, aborter.signal));
       }
 
@@ -97,7 +107,9 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
         .then(returnOrThrow);
     } finally {
       onCancelledListener.dispose();
-      aborter.abort();
+      if (this.options.abortOnReturn !== false) {
+        aborter.abort();
+      }
       clearTimeout(timer);
     }
   }
