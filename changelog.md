@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.1
+
+- **fix:** memory leak when using `timeout()` in `wrap()` ([#69](https://github.com/connor4312/cockatiel/issues/69))
+
 ## 3.1.0
 
 - **feat:** add new option `abortOnReturn` to timeouts ([#72](https://github.com/connor4312/cockatiel/issues/72))

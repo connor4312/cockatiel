@@ -20,7 +20,10 @@ export const deriveAbortController = (signal?: AbortSignal) => {
     ctrl.abort();
   }
 
-  onAbort(signal)(() => ctrl.abort());
+  if (signal !== neverAbortedSignal) {
+    const ref = new WeakRef(ctrl);
+    onAbort(signal)(() => ref.deref()?.abort());
+  }
 
   return ctrl;
 };
