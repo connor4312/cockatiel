@@ -133,14 +133,12 @@ describe('TimeoutPolicy', () => {
         const val = Reflect.get(signal, key, receiver);
         if (key === 'addEventListener') {
           return (...args: any[]) => {
-            console.log(key);
             listenerCount++;
             return Reflect.apply(val, signal, args);
           };
         }
         if (key === 'removeEventListener') {
           return (...args: any[]) => {
-            console.log(key);
             listenerCount--;
             return Reflect.apply(val, signal, args);
           };
