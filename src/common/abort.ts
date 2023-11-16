@@ -13,7 +13,7 @@ export const abortedSignal = cancelledSrc.signal;
 export const deriveAbortController = (signal?: AbortSignal) => {
   const ctrl = new AbortController();
   if (!signal) {
-    return ctrl;
+    return { controller: ctrl };
   }
 
   if (signal.aborted) {
@@ -22,8 +22,9 @@ export const deriveAbortController = (signal?: AbortSignal) => {
 
   if (signal !== neverAbortedSignal) {
     const ref = new WeakRef(ctrl);
-    onAbort(signal)(() => ref.deref()?.abort());
+    const { dispose } = onAbort(signal)(() => ref.deref()?.abort());
+    return { controller: ctrl, dispose };
   }
 
-  return ctrl;
+  return { controller: ctrl };
 };

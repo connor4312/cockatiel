@@ -79,7 +79,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
     fn: (context: ICancellationContext, signal: AbortSignal) => PromiseLike<T> | T,
     signal?: AbortSignal,
   ): Promise<T> {
-    const aborter = deriveAbortController(signal);
+    const { controller: aborter, dispose: disposeAborter } = deriveAbortController(signal);
     const timer = setTimeout(() => aborter.abort(), this.duration);
     if (this.unref) {
       timer.unref();
@@ -110,6 +110,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
       if (this.options.abortOnReturn !== false) {
         aborter.abort();
       }
+      disposeAborter?.();
       clearTimeout(timer);
     }
   }

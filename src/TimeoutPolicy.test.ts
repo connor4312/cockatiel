@@ -1,10 +1,11 @@
 import { expect } from 'chai';
 import { SinonStub, stub } from 'sinon';
 import { promisify } from 'util';
+import { ExponentialBackoff } from '.';
+import { handleAll, retry, timeout, wrap } from './Policy';
+import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 import { runInChild } from './common/util.test';
 import { TaskCancelledError } from './errors/TaskCancelledError';
-import { timeout } from './Policy';
-import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
 const delay = promisify(setTimeout);
 
@@ -99,6 +100,60 @@ describe('TimeoutPolicy', () => {
       },
     );
     expect(signal!.aborted).to.be.false;
+  });
+
+  it('does not leak abort listeners', async () => {
+    const fail = (times: number) => {
+      let c = times;
+      return async () => {
+        if (c-- > 0) {
+          console.log('failing');
+          throw Error('fail');
+        }
+        console.log('success');
+      };
+    };
+
+    const timeoutPolicy = timeout(1, TimeoutStrategy.Cooperative);
+    const retryPolicy = retry(handleAll, {
+      backoff: new ExponentialBackoff({
+        initialDelay: 1,
+        exponent: 2,
+        maxDelay: 1,
+      }),
+    });
+    const policy = wrap(retryPolicy, timeoutPolicy);
+
+    const ac = new AbortController();
+
+    let listenerCount = 0;
+
+    const sig = new Proxy(ac.signal, {
+      get: (signal, key, receiver) => {
+        const val = Reflect.get(signal, key, receiver);
+        if (key === 'addEventListener') {
+          return (...args: any[]) => {
+            console.log(key);
+            listenerCount++;
+            return Reflect.apply(val, signal, args);
+          };
+        }
+        if (key === 'removeEventListener') {
+          return (...args: any[]) => {
+            console.log(key);
+            listenerCount--;
+            return Reflect.apply(val, signal, args);
+          };
+        }
+        return val;
+      },
+    });
+
+    const func = fail(15);
+
+    await policy.execute(() => func(), sig);
+
+    expect(listenerCount).to.eq(0);
   });
 
   describe('events', () => {
