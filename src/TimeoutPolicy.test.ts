@@ -107,10 +107,8 @@ describe('TimeoutPolicy', () => {
       let c = times;
       return async () => {
         if (c-- > 0) {
-          console.log('failing');
           throw Error('fail');
         }
-        console.log('success');
       };
     };
 
