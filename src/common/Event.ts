@@ -83,7 +83,7 @@ export const onAbort = (signal: AbortSignal): Event<void> => {
 
   (signal as any).addEventListener('abort', l);
 
-  return (...args: Parameters<typeof evt.addListener>) => {
+  const returnVal: typeof evt.addListener = (...args): { dispose(): void } => {
     const { dispose } = evt.addListener(...args);
     return {
       dispose() {
@@ -92,6 +92,7 @@ export const onAbort = (signal: AbortSignal): Event<void> => {
       },
     };
   };
+  return returnVal;
 };
 
 /**
