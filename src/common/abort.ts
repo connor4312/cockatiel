@@ -10,10 +10,15 @@ export const abortedSignal = cancelledSrc.signal;
  * Creates a new AbortController that is aborted when the parent signal aborts.
  * @private
  */
-export const deriveAbortController = (signal?: AbortSignal) => {
+export const deriveAbortController = (
+  signal?: AbortSignal,
+): {
+  controller: AbortController;
+  dispose: () => void;
+} => {
   const ctrl = new AbortController();
   if (!signal) {
-    return { controller: ctrl };
+    return { controller: ctrl, dispose: () => {} };
   }
 
   if (signal.aborted) {
