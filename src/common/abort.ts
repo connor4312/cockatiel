@@ -14,11 +14,11 @@ export const deriveAbortController = (
   signal?: AbortSignal,
 ): {
   controller: AbortController;
-  dispose: () => void;
+  dispose?: () => void;
 } => {
   const ctrl = new AbortController();
   if (!signal) {
-    return { controller: ctrl, dispose: () => {} };
+    return { controller: ctrl };
   }
 
   if (signal.aborted) {
