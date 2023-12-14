@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.2
+
+- **chore:** remove test files from dist package ([#84](https://github.com/connor4312/cockatiel/issues/84))
+
 ## 3.1.1
 
 - **fix:** memory leak when using `timeout()` in `wrap()` ([#69](https://github.com/connor4312/cockatiel/issues/69))
