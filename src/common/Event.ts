@@ -83,7 +83,16 @@ export const onAbort = (signal: AbortSignal): Event<void> => {
 
   (signal as any).addEventListener('abort', l);
 
-  return evt.addListener;
+  const returnVal: typeof evt.addListener = (...args): { dispose(): void } => {
+    const { dispose } = evt.addListener(...args);
+    return {
+      dispose() {
+        (signal as any).removeEventListener('abort', l);
+        dispose();
+      },
+    };
+  };
+  return returnVal;
 };
 
 /**
