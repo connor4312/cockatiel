@@ -56,7 +56,7 @@ export const decorrelatedJitterGenerator: GeneratorFn<[number, number]> = (state
   const [attempt, prev] = state || [0, 0];
   const t = attempt + Math.random();
   const next = Math.pow(options.exponent, t) * Math.tanh(Math.sqrt(pFactor * t));
-  const formulaIntrinsicValue = Math.max(0, next - prev);
+  const formulaIntrinsicValue = isFinite(next) ? Math.max(0, next - prev) : Infinity;
   return [
     Math.min(formulaIntrinsicValue * rpScalingFactor * options.initialDelay, options.maxDelay),
     [attempt + 1, next],

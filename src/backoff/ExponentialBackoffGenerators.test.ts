@@ -35,4 +35,21 @@ describe('ExponentialBackoff Generators', () => {
       }
     });
   }
+
+  it('fixes issue #86', () => {
+    const options: IExponentialBackoffOptions<any> = {
+      generator: decorrelatedJitterGenerator,
+      maxDelay: 15 * 60_000,
+      exponent: 2,
+      initialDelay: 45_000,
+    };
+
+    let state: any;
+    for (let k = 1; k < 3000; k++) {
+      const [delay, nextState] = decorrelatedJitterGenerator(state, options);
+      expect(delay).to.not.be.NaN;
+      expect(delay).to.be.gte(0);
+      state = nextState;
+    }
+  });
 });

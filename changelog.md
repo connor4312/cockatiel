@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.3
+
+- **fix:** decorrelatedJitter backoff returning NaN after many iterations ([#86](https://github.com/connor4312/cockatiel/issues/86))
+
 ## 3.1.2
 
 - **chore:** remove test files from dist package ([#84](https://github.com/connor4312/cockatiel/issues/84))
