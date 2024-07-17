@@ -40,7 +40,7 @@ export class SamplingBreaker implements IBreaker {
   /**
    * SamplingBreaker breaks if more than `threshold` percentage of calls over the
    * last `samplingDuration`, so long as there's at least `minimumRps` (to avoid
-   * closing unnecessarily under low RPS).
+   * opening unnecessarily under low RPS).
    */
   constructor({ threshold, duration: samplingDuration, minimumRps }: ISamplingBreakerOptions) {
     if (threshold <= 0 || threshold >= 1) {

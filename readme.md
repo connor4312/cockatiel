@@ -75,6 +75,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
 - [`circuitBreaker(policy, { halfOpenAfter, breaker })`](#circuitbreakerpolicy--halfopenafter-breaker-)
   - [Breakers](#breakers)
     - [`ConsecutiveBreaker`](#consecutivebreaker)
+    - [`CountBreaker`](#countbreaker)
     - [`SamplingBreaker`](#samplingbreaker)
   - [`breaker.execute(fn[, signal])`](#breakerexecutefn-signal)
   - [`breaker.state`](#breakerstate)
@@ -623,6 +624,31 @@ const breaker = circuitBreaker(handleAll, {
 });
 ```
 
+#### `CountBreaker`
+
+The `CountBreaker` breaks after a proportion of requests in a count based sliding window fail. It is inspired by the [Count-based sliding window in Resilience4j](https://resilience4j.readme.io/docs/circuitbreaker#count-based-sliding-window).
+
+```js
+// Break if more than 20% of requests fail in a sliding window of size 100:
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new CountBreaker({ threshold: 0.2, size: 100 }),
+});
+```
+
+You can specify a minimum minimum-number-of-calls value to use, to avoid opening the circuit when there are only few samples in the sliding window. By default this value is set to the sliding window size, but you can override it if necessary:
+
+```js
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new CountBreaker({
+    threshold: 0.2,
+    size: 100,
+    minimumNumberOfCalls: 50, // require 50 requests before we can break
+  }),
+});
+```
+
 #### `SamplingBreaker`
 
 The `SamplingBreaker` breaks after a proportion of requests over a time period fail.
@@ -635,7 +661,7 @@ const breaker = circuitBreaker(handleAll, {
 });
 ```
 
-You can specify a minimum requests-per-second value to use to avoid closing the circuit under period of low load. By default we'll choose a value such that you need 5 failures per second for the breaker to kick in, and you can configure this if it doesn't work for you:
+You can specify a minimum requests-per-second value to use to avoid opening the circuit under periods of low load. By default we'll choose a value such that you need 5 failures per second for the breaker to kick in, and you can configure this if it doesn't work for you:
 
 ```js
 const breaker = circuitBreaker(handleAll, {
