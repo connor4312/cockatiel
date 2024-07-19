@@ -159,9 +159,9 @@ describe('RetryPolicy', () => {
     await expect(
       retry(handleAll, { maxAttempts: 3 }).execute(({ signal }) => {
         calls++;
-        expect(signal.aborted).to.be.false;
+        expect(signal?.aborted).to.be.false;
         parent.abort();
-        expect(signal.aborted).to.be.true;
+        expect(signal?.aborted).to.be.true;
         throw err;
       }, parent.signal),
     ).to.eventually.be.rejectedWith(err);

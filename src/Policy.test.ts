@@ -142,14 +142,14 @@ describe('Policy', () => {
     });
   });
 
-  it('uses cancellation token in use', async () => {
+  it('uses abort signal in use', async () => {
     class Calculator {
       @usePolicy(retry(handleAll, { maxAttempts: 5 }))
       public double(n: number, context: IRetryContext) {
         expect(n).to.equal(2);
-        expect(context.signal.aborted).to.be.false;
+        expect(context.signal?.aborted).to.be.false;
         cts.abort();
-        expect(context.signal.aborted).to.be.true;
+        expect(context.signal?.aborted).to.be.true;
         return n * 2;
       }
     }

@@ -6,7 +6,7 @@ import { IPolicy } from './Policy';
 
 export enum TimeoutStrategy {
   /**
-   * Cooperative timeouts will simply revoke the inner cancellation token,
+   * Cooperative timeouts will simply abort the inner abort signal,
    * assuming the caller handles cancellation and throws or returns appropriately.
    */
   Cooperative = 'optimistic',
@@ -72,7 +72,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
 
   /**
    * Executes the given function.
-   * @param fn Function to execute. Takes in a nested cancellation token.
+   * @param fn Function to execute. Takes in a nested abort signal.
    * @throws a {@link TaskCancelledError} if a timeout occurs
    */
   public async execute<T>(
