@@ -1,3 +1,4 @@
+import { ConstantBackoff, IBackoff, IBackoffFactory } from './backoff/Backoff';
 import { IBreaker } from './breaker/Breaker';
 import { neverAbortedSignal } from './common/abort';
 import { EventEmitter } from './common/Event';
@@ -30,9 +31,31 @@ export enum CircuitState {
   Isolated,
 }
 
+/**
+ * Context passed into halfOpenAfter backoff delegate.
+ */
+export interface IHalfOpenAfterBackoffContext extends IDefaultPolicyContext {
+  /**
+   * The consecutive number of times the circuit has entered the
+   * {@link CircuitState.Open} state.
+   */
+  attempt: number;
+  /**
+   * The result of the last method call that caused the circuit to enter the
+   * {@link CircuitState.Open} state. Either a thrown error, or a value that we
+   * determined should open the circuit.
+   */
+  result: FailureReason<unknown>;
+}
+
 export interface ICircuitBreakerOptions {
   breaker: IBreaker;
-  halfOpenAfter: number;
+  /**
+   * When to (potentially) enter the {@link CircuitState.HalfOpen} state from
+   * the {@link CircuitState.Open} state. Either a duration in milliseconds or a
+   * backoff factory.
+   */
+  halfOpenAfter: number | IBackoffFactory<IHalfOpenAfterBackoffContext>;
 }
 
 type InnerState =
@@ -48,8 +71,11 @@ export class CircuitBreakerPolicy implements IPolicy {
   private readonly resetEmitter = new EventEmitter<void>();
   private readonly halfOpenEmitter = new EventEmitter<void>();
   private readonly stateChangeEmitter = new EventEmitter<CircuitState>();
+  private readonly halfOpenAfterBackoffFactory: IBackoffFactory<IHalfOpenAfterBackoffContext>;
   private innerLastFailure?: FailureReason<unknown>;
   private innerState: InnerState = { value: CircuitState.Closed };
+  private openEnteredCount = 0;
+  private halfOpenAfterBackof: IBackoff<IHalfOpenAfterBackoffContext> | undefined;
 
   /**
    * Event emitted when the circuit breaker opens.
@@ -99,7 +125,12 @@ export class CircuitBreakerPolicy implements IPolicy {
   constructor(
     private readonly options: ICircuitBreakerOptions,
     private readonly executor: ExecuteWrapper,
-  ) {}
+  ) {
+    this.halfOpenAfterBackoffFactory =
+      typeof options.halfOpenAfter === 'number'
+        ? new ConstantBackoff(options.halfOpenAfter)
+        : options.halfOpenAfter;
+  }
 
   /**
    * Manually holds open the circuit breaker.
@@ -152,7 +183,7 @@ export class CircuitBreakerPolicy implements IPolicy {
         } else {
           this.innerLastFailure = result;
           if (this.options.breaker.failure(state.value)) {
-            this.open(result);
+            this.open(result, signal);
           }
         }
 
@@ -167,7 +198,7 @@ export class CircuitBreakerPolicy implements IPolicy {
         return this.execute(fn);
 
       case CircuitState.Open:
-        if (Date.now() - state.openedAt < this.options.halfOpenAfter) {
+        if (Date.now() - state.openedAt < (this.halfOpenAfterBackof?.duration ?? 0)) {
           throw new BrokenCircuitError();
         }
         const test = this.halfOpen(fn, signal);
@@ -197,7 +228,7 @@ export class CircuitBreakerPolicy implements IPolicy {
       } else {
         this.innerLastFailure = result;
         this.options.breaker.failure(CircuitState.HalfOpen);
-        this.open(result);
+        this.open(result, signal);
       }
 
       return returnOrThrow(result);
@@ -209,7 +240,7 @@ export class CircuitBreakerPolicy implements IPolicy {
     }
   }
 
-  private open(reason: FailureReason<unknown>) {
+  private open(reason: FailureReason<unknown>, signal: AbortSignal) {
     if (this.state === CircuitState.Isolated || this.state === CircuitState.Open) {
       return;
     }
@@ -217,6 +248,9 @@ export class CircuitBreakerPolicy implements IPolicy {
     this.innerState = { value: CircuitState.Open, openedAt: Date.now() };
     this.breakEmitter.emit(reason);
     this.stateChangeEmitter.emit(CircuitState.Open);
+    const context = { attempt: ++this.openEnteredCount, result: reason, signal };
+    this.halfOpenAfterBackof =
+      this.halfOpenAfterBackof?.next(context) ?? this.halfOpenAfterBackoffFactory.next(context);
   }
 
   private close() {
@@ -224,6 +258,8 @@ export class CircuitBreakerPolicy implements IPolicy {
       this.innerState = { value: CircuitState.Closed };
       this.resetEmitter.emit();
       this.stateChangeEmitter.emit(CircuitState.Closed);
+      this.halfOpenAfterBackof = undefined;
+      this.openEnteredCount = 0;
     }
   }
 }

@@ -7,6 +7,7 @@ import { abortedSignal } from './common/abort';
 import { BrokenCircuitError, TaskCancelledError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
 import { circuitBreaker, handleAll, handleType } from './Policy';
+import { IterableBackoff } from './backoff/IterableBackoff';
 
 class MyException extends Error {}
 
@@ -77,6 +78,71 @@ describe('CircuitBreakerPolicy', () => {
     expect(await result).to.equal(42);
     expect(p.state).to.equal(CircuitState.Closed);
     expect(onReset).calledOnce;
+  });
+
+  it('uses the given backof factory to decide whether to enter the half open state', async () => {
+    p = circuitBreaker(handleType(MyException), {
+      halfOpenAfter: new IterableBackoff([1000, 2000]),
+      breaker: new ConsecutiveBreaker(2),
+    });
+    p.onReset(onReset);
+    p.onHalfOpen(onHalfOpen);
+
+    await openBreaker();
+
+    clock.tick(1000);
+
+    const failedAttempt = p.execute(stub().throws(new MyException()));
+    expect(p.state).to.equal(CircuitState.HalfOpen);
+    expect(onHalfOpen).calledOnce;
+    await expect(failedAttempt).to.be.rejectedWith(MyException);
+    expect(p.state).to.equal(CircuitState.Open);
+
+    clock.tick(1000);
+
+    await expect(p.execute(stub().throws(new MyException()))).to.be.rejectedWith(
+      BrokenCircuitError,
+    );
+
+    clock.tick(1000);
+
+    const result = p.execute(stub().resolves(42));
+    expect(p.state).to.equal(CircuitState.HalfOpen);
+    expect(onHalfOpen).calledTwice;
+    expect(await result).to.equal(42);
+    expect(p.state).to.equal(CircuitState.Closed);
+    expect(onReset).calledOnce;
+  });
+
+  it('resets the backoff when closing the circuit', async () => {
+    p = circuitBreaker(handleType(MyException), {
+      halfOpenAfter: new IterableBackoff([1000, 2000]),
+      breaker: new ConsecutiveBreaker(2),
+    });
+    p.onReset(onReset);
+    p.onHalfOpen(onHalfOpen);
+
+    await openBreaker();
+
+    clock.tick(1000);
+
+    const halfOpenTest1 = p.execute(stub().resolves(42));
+    expect(p.state).to.equal(CircuitState.HalfOpen);
+    expect(onHalfOpen).calledOnce;
+    expect(await halfOpenTest1).to.equal(42);
+    expect(p.state).to.equal(CircuitState.Closed);
+    expect(onReset).calledOnce;
+
+    await openBreaker();
+
+    clock.tick(1000);
+
+    const halfOpenTest2 = p.execute(stub().resolves(42));
+    expect(p.state).to.equal(CircuitState.HalfOpen);
+    expect(onHalfOpen).calledTwice;
+    expect(await halfOpenTest2).to.equal(42);
+    expect(p.state).to.equal(CircuitState.Closed);
+    expect(onReset).calledTwice;
   });
 
   it('dedupes half-open tests', async () => {

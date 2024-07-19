@@ -1,7 +1,7 @@
 import { ConstantBackoff, IBackoffFactory } from './backoff/Backoff';
 import { IBreaker } from './breaker/Breaker';
 import { BulkheadPolicy } from './BulkheadPolicy';
-import { CircuitBreakerPolicy } from './CircuitBreakerPolicy';
+import { CircuitBreakerPolicy, IHalfOpenAfterBackoffContext } from './CircuitBreakerPolicy';
 import { Event } from './common/Event';
 import { ExecuteWrapper } from './common/Executor';
 import { FallbackPolicy } from './FallbackPolicy';
@@ -450,7 +450,13 @@ export function retry(
  * @param breaker The circuit breaker to use. This package exports
  * ConsecutiveBreaker and SamplingBreakers for you to use.
  */
-export function circuitBreaker(policy: Policy, opts: { halfOpenAfter: number; breaker: IBreaker }) {
+export function circuitBreaker(
+  policy: Policy,
+  opts: {
+    halfOpenAfter: number | IBackoffFactory<IHalfOpenAfterBackoffContext>;
+    breaker: IBreaker;
+  },
+) {
   return new CircuitBreakerPolicy(
     opts,
     new ExecuteWrapper(policy.options.errorFilter, policy.options.resultFilter),
