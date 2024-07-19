@@ -1,6 +1,5 @@
 import { IBackoff, IBackoffFactory } from './backoff/Backoff';
 import { ConstantBackoff } from './backoff/ConstantBackoff';
-import { neverAbortedSignal } from './common/abort';
 import { EventEmitter } from './common/Event';
 import { ExecuteWrapper } from './common/Executor';
 import { FailureReason, IDefaultPolicyContext, IPolicy } from './Policy';
@@ -96,7 +95,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
    */
   public async execute<T>(
     fn: (context: IRetryContext) => PromiseLike<T> | T,
-    signal = neverAbortedSignal,
+    signal?: AbortSignal,
   ): Promise<T> {
     const factory: IBackoffFactory<IRetryBackoffContext<unknown>> =
       this.options.backoff || new ConstantBackoff(0);
@@ -107,7 +106,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
         return result.success;
       }
 
-      if (!signal.aborted && retries < this.options.maxAttempts) {
+      if (!signal?.aborted && retries < this.options.maxAttempts) {
         const context = { attempt: retries + 1, signal, result };
         backoff = backoff ? backoff.next(context) : factory.next(context);
         const delayDuration = backoff.duration;

@@ -163,15 +163,15 @@ describe('CircuitBreakerPolicy', () => {
     expect(await p.execute(() => 42)).to.equal(42);
   });
 
-  it('links parent cancellation token', async () => {
+  it('links parent abort signal', async () => {
     const parent = new AbortController();
     await circuitBreaker(handleAll, {
       halfOpenAfter: 1000,
       breaker: new ConsecutiveBreaker(3),
     }).execute(({ signal }) => {
-      expect(signal.aborted).to.be.false;
+      expect(signal?.aborted).to.be.false;
       parent.abort();
-      expect(signal.aborted).to.be.true;
+      expect(signal?.aborted).to.be.true;
     }, parent.signal);
   });
 

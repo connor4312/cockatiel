@@ -1,5 +1,4 @@
 import { IBreaker } from './breaker/Breaker';
-import { neverAbortedSignal } from './common/abort';
 import { EventEmitter } from './common/Event';
 import { ExecuteWrapper, returnOrThrow } from './common/Executor';
 import { BrokenCircuitError, TaskCancelledError } from './errors/Errors';
@@ -141,7 +140,7 @@ export class CircuitBreakerPolicy implements IPolicy {
    */
   public async execute<T>(
     fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
-    signal = neverAbortedSignal,
+    signal?: AbortSignal,
   ): Promise<T> {
     const state = this.innerState;
     switch (state.value) {
@@ -160,7 +159,7 @@ export class CircuitBreakerPolicy implements IPolicy {
 
       case CircuitState.HalfOpen:
         await state.test.catch(() => undefined);
-        if (this.state === CircuitState.Closed && signal.aborted) {
+        if (this.state === CircuitState.Closed && signal?.aborted) {
           throw new TaskCancelledError();
         }
 
@@ -185,7 +184,7 @@ export class CircuitBreakerPolicy implements IPolicy {
 
   private async halfOpen<T>(
     fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
-    signal: AbortSignal,
+    signal?: AbortSignal,
   ): Promise<T> {
     this.halfOpenEmitter.emit();
 

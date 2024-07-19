@@ -65,7 +65,7 @@ describe('TimeoutPolicy', () => {
     expect(output).to.be.empty;
   });
 
-  it('links parent cancellation token', async () => {
+  it('links parent abort signal', async () => {
     const parent = new AbortController();
     await timeout(1000, TimeoutStrategy.Cooperative).execute((_, signal) => {
       expect(signal.aborted).to.be.false;

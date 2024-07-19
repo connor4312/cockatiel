@@ -63,7 +63,7 @@ export interface IDefaultPolicyContext {
    * Abort signal for the operation. This is propagated through multiple
    * retry policies.
    */
-  signal: AbortSignal;
+  signal?: AbortSignal;
 }
 
 /**

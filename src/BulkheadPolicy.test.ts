@@ -120,7 +120,7 @@ describe('Bulkhead', () => {
     expect(b.queueSlots).to.equal(2);
   });
 
-  it('links parent cancellation token', async () => {
+  it('links parent abort signal', async () => {
     const b = bulkhead(1, Infinity);
     const todo: Array<PromiseLike<void>> = [];
     for (let i = 0; i < 3; i++) {
@@ -128,9 +128,9 @@ describe('Bulkhead', () => {
       todo.push(
         b.execute(async ({ signal }) => {
           await delay(1);
-          expect(signal.aborted).to.be.false;
+          expect(signal?.aborted).to.be.false;
           parent.abort();
-          expect(signal.aborted).to.be.true;
+          expect(signal?.aborted).to.be.true;
         }, parent.signal),
       );
     }

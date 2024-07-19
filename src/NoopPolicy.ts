@@ -1,4 +1,3 @@
-import { neverAbortedSignal } from './common/abort';
 import { ExecuteWrapper, returnOrThrow } from './common/Executor';
 import { IDefaultPolicyContext, IPolicy } from './Policy';
 
@@ -13,7 +12,7 @@ export class NoopPolicy implements IPolicy {
 
   public async execute<T>(
     fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
-    signal: AbortSignal = neverAbortedSignal,
+    signal?: AbortSignal,
   ): Promise<T> {
     return returnOrThrow(await this.executor.invoke(fn, { signal }));
   }

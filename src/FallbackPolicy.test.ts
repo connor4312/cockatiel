@@ -25,12 +25,12 @@ describe('FallbackPolicy', () => {
     });
   });
 
-  it('links parent cancellation token', async () => {
+  it('links parent abort signal', async () => {
     const parent = new AbortController();
     await fallback(handleAll, 'error').execute(({ signal }) => {
-      expect(signal.aborted).to.be.false;
+      expect(signal?.aborted).to.be.false;
       parent.abort();
-      expect(signal.aborted).to.be.true;
+      expect(signal?.aborted).to.be.true;
     }, parent.signal);
   });
 });

@@ -1,7 +1,5 @@
 import { onAbort } from './Event';
 
-export const neverAbortedSignal = new AbortController().signal;
-
 const cancelledSrc = new AbortController();
 cancelledSrc.abort();
 export const abortedSignal = cancelledSrc.signal;
@@ -18,12 +16,11 @@ export const deriveAbortController = (signal?: AbortSignal) => {
 
   if (signal.aborted) {
     ctrl.abort();
+    return ctrl;
   }
 
-  if (signal !== neverAbortedSignal) {
-    const ref = new WeakRef(ctrl);
-    onAbort(signal)(() => ref.deref()?.abort());
-  }
+  const ref = new WeakRef(ctrl);
+  onAbort(signal)(() => ref.deref()?.abort());
 
   return ctrl;
 };

@@ -1,4 +1,3 @@
-import { neverAbortedSignal } from './common/abort';
 import { defer } from './common/defer';
 import { EventEmitter } from './common/Event';
 import { ExecuteWrapper } from './common/Executor';
@@ -7,7 +6,7 @@ import { TaskCancelledError } from './errors/Errors';
 import { IDefaultPolicyContext, IPolicy } from './Policy';
 
 interface IQueueItem<T> {
-  signal: AbortSignal;
+  signal?: AbortSignal;
   fn(context: IDefaultPolicyContext): Promise<T> | T;
   resolve(value: T): void;
   reject(error: Error): void;
@@ -62,9 +61,9 @@ export class BulkheadPolicy implements IPolicy {
    */
   public async execute<T>(
     fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
-    signal = neverAbortedSignal,
+    signal?: AbortSignal,
   ): Promise<T> {
-    if (signal.aborted) {
+    if (signal?.aborted) {
       throw new TaskCancelledError();
     }
 
