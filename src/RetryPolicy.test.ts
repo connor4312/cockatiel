@@ -178,4 +178,16 @@ describe('RetryPolicy', () => {
     await expect(policy.execute(s)).to.eventually.be.rejectedWith(MyErrorA);
     expect(onGiveUp).to.have.been.calledWith({ error: err });
   });
+
+  it('provides the attempt to the onRetry callback', async () => {
+    const s = stub().throws(new MyErrorA());
+    const attempts: number[] = [];
+    const policy = retry(handleAll, { maxAttempts: 3 });
+    policy.onRetry(({ attempt }) => {
+      attempts.push(attempt);
+    });
+
+    await expect(policy.execute(s)).to.eventually.be.rejectedWith(MyErrorA);
+    expect(attempts).to.deep.equal([1, 2, 3]);
+  });
 });

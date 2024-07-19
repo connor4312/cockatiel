@@ -514,10 +514,11 @@ const response1 = await retry(handleAll, { maxAttempts: 3 })
 
 An [event emitter](#events) that fires when we retry a call, before any backoff. It's invoked with an object that includes:
 
-- the `delay` we're going to wait before retrying, and;
+- the `delay` we're going to wait before retrying,
+- the `attempt` number of the upcoming retry, starting at `1`, and;
 - either a thrown error like `{ error: someError, delay: number }`, or an errorful result in an object like `{ value: someValue, delay: number }` when using [result filtering](#handleresulttypector-filter--policyorresulttypector-filter).
 
-Useful for telemetry. Returns a dispable instance.
+Useful for telemetry. Returns a disposable instance.
 
 ```js
 const listener = retry.onRetry(reason => console.log('retrying a function call:', reason));
@@ -557,7 +558,7 @@ listener.dispose();
 
 ### `retry.onGiveUp(callback)`
 
-An [event emitter](#events) that fires when we're no longer retrying a call and are giving up. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#handleresulttypector-filter--policyorresulttypector-filter). Useful for telemetry. Returns a dispable instance.
+An [event emitter](#events) that fires when we're no longer retrying a call and are giving up. It's invoked with either a thrown error in an object like `{ error: someError }`, or an errorful result in an object like `{ value: someValue }` when using [result filtering](#handleresulttypector-filter--policyorresulttypector-filter). Useful for telemetry. Returns a disposable instance.
 
 ```js
 const listener = retry.onGiveUp(reason => console.log('retrying a function call:', reason));
