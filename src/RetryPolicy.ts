@@ -49,7 +49,9 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
   declare readonly _altReturn: never;
 
   private readonly onGiveUpEmitter = new EventEmitter<FailureReason<unknown>>();
-  private readonly onRetryEmitter = new EventEmitter<FailureReason<unknown> & { delay: number }>();
+  private readonly onRetryEmitter = new EventEmitter<
+    FailureReason<unknown> & { delay: number; attempt: number }
+  >();
 
   /**
    * @inheritdoc
@@ -112,7 +114,7 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
         const delayPromise = delay(delayDuration, !!this.options.unref);
         // A little sneaky reordering here lets us use Sinon's fake timers
         // when we get an emission in our tests.
-        this.onRetryEmitter.emit({ ...result, delay: delayDuration });
+        this.onRetryEmitter.emit({ ...result, delay: delayDuration, attempt: retries + 1 });
         await delayPromise;
         continue;
       }
