@@ -86,7 +86,7 @@ describe('Policy', () => {
         handleType(MyError1)
           .orType(MyError2)
           .orType(MyError3, e => e.message === 'foo')
-          .orWhen(e => e.message === 'potato'),
+          .orWhen(e => e instanceof Error && e.message === 'potato'),
         { maxAttempts: 10 },
       ).execute(fn),
     ).to.be.rejectedWith(MyError3, 'bar');
