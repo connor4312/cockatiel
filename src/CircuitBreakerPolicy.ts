@@ -3,7 +3,7 @@ import { IBreaker } from './breaker/Breaker';
 import { neverAbortedSignal } from './common/abort';
 import { EventEmitter } from './common/Event';
 import { ExecuteWrapper, returnOrThrow } from './common/Executor';
-import { BrokenCircuitError, TaskCancelledError } from './errors/Errors';
+import { BrokenCircuitError, HydratingCircuitError, TaskCancelledError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
 import { FailureReason, IDefaultPolicyContext, IPolicy } from './Policy';
 
@@ -50,12 +50,18 @@ export interface IHalfOpenAfterBackoffContext extends IDefaultPolicyContext {
 
 export interface ICircuitBreakerOptions {
   breaker: IBreaker;
+
   /**
    * When to (potentially) enter the {@link CircuitState.HalfOpen} state from
    * the {@link CircuitState.Open} state. Either a duration in milliseconds or a
    * backoff factory.
    */
   halfOpenAfter: number | IBackoffFactory<IHalfOpenAfterBackoffContext>;
+
+  /**
+   * Initial state from a previous call to {@link CircuitBreakerPolicy.toJSON}.
+   */
+  initialState?: unknown;
 }
 
 type InnerState =
@@ -138,6 +144,30 @@ export class CircuitBreakerPolicy implements IPolicy {
       typeof options.halfOpenAfter === 'number'
         ? new ConstantBackoff(options.halfOpenAfter)
         : options.halfOpenAfter;
+
+    if (options.initialState) {
+      this.innerState = options.initialState as InnerState;
+
+      if (
+        this.innerState.value === CircuitState.Open ||
+        this.innerState.value === CircuitState.HalfOpen
+      ) {
+        this.innerLastFailure = { error: new HydratingCircuitError() };
+        let backoff = this.halfOpenAfterBackoffFactory.next({
+          attempt: 1,
+          result: this.innerLastFailure,
+          signal: neverAbortedSignal,
+        });
+        for (let i = 2; i <= this.innerState.attemptNo; i++) {
+          backoff = backoff.next({
+            attempt: i,
+            result: this.innerLastFailure,
+            signal: neverAbortedSignal,
+          });
+        }
+        this.innerState.backoff = backoff;
+      }
+    }
   }
 
   /**
@@ -224,6 +254,31 @@ export class CircuitBreakerPolicy implements IPolicy {
 
       default:
         throw new Error(`Unexpected circuit state ${state}`);
+    }
+  }
+
+  /**
+   * Captures circuit breaker state that can later be used to recreate the
+   * breaker by passing `state` to the `circuitBreaker` function. This is
+   * useful in cases like serverless functions where you may want to keep
+   * the breaker state across multiple executions.
+   */
+  public toJSON(): unknown {
+    const state = this.innerState;
+    if (state.value === CircuitState.HalfOpen) {
+      return {
+        value: CircuitState.Open,
+        openedAt: 0,
+        attemptNo: state.attemptNo,
+      } satisfies Partial<InnerState>;
+    } else if (state.value === CircuitState.Open) {
+      return {
+        value: CircuitState.Open,
+        openedAt: state.openedAt,
+        attemptNo: state.attemptNo,
+      } satisfies Partial<InnerState>;
+    } else {
+      return state;
     }
   }
 

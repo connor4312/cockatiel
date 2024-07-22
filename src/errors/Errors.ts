@@ -1,10 +1,12 @@
 import { BrokenCircuitError } from './BrokenCircuitError';
 import { BulkheadRejectedError } from './BulkheadRejectedError';
+import { HydratingCircuitError } from './HydratingCircuitError';
 import { IsolatedCircuitError } from './IsolatedCircuitError';
 import { TaskCancelledError } from './TaskCancelledError';
 
 export * from './BrokenCircuitError';
 export * from './BulkheadRejectedError';
+export * from './HydratingCircuitError';
 export * from './IsolatedCircuitError';
 export * from './TaskCancelledError';
 
@@ -19,3 +21,6 @@ export const isIsolatedCircuitError = (e: unknown): e is IsolatedCircuitError =>
 
 export const isTaskCancelledError = (e: unknown): e is TaskCancelledError =>
   !!e && e instanceof Error && 'isBulkheadRejectedError' in e;
+
+export const isHydratingCircuitError = (e: unknown): e is HydratingCircuitError =>
+  !!e && e instanceof Error && 'isHydratingCircuitError' in e;

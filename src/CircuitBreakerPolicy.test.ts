@@ -267,4 +267,100 @@ describe('CircuitBreakerPolicy', () => {
     expect(p.state).to.equal(CircuitState.Closed);
     expect(onReset).calledOnce;
   });
+
+  describe('state restoration', () => {
+    let args: { duration: number; attempt: number }[] = [];
+    class MyBreaker implements IBackoffFactory<IHalfOpenAfterBackoffContext> {
+      constructor(public readonly duration: number) {}
+
+      next(context: IHalfOpenAfterBackoffContext) {
+        args.push({ duration: this.duration + 1, attempt: context.attempt });
+        expect('error' in context.result).to.be.true;
+        return new MyBreaker(this.duration + 1);
+      }
+    }
+
+    beforeEach(() => {
+      args = [];
+    });
+
+    it('restores closed state', async () => {
+      p = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: new MyBreaker(0),
+        breaker: new ConsecutiveBreaker(2),
+      });
+
+      const p2 = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: new MyBreaker(0),
+        breaker: new ConsecutiveBreaker(2),
+        initialState: p.toJSON(),
+      });
+
+      expect(p2.state).to.equal(CircuitState.Closed);
+      await p2.execute(stub().resolves(42));
+    });
+
+    it('restores open state', async () => {
+      p = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: new MyBreaker(0),
+        breaker: new ConsecutiveBreaker(2),
+      });
+
+      await openBreaker();
+      clock.tick(args.pop()!.duration);
+      await expect(p.execute(stub().throws(new MyException()))).to.be.rejectedWith(MyException);
+      args.length = 0;
+
+      const p2 = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: new MyBreaker(0),
+        breaker: new ConsecutiveBreaker(2),
+        initialState: p.toJSON(),
+      });
+
+      expect(p2.state).to.equal(CircuitState.Open);
+      expect(args).to.deep.equal([
+        { duration: 1, attempt: 1 },
+        { duration: 2, attempt: 2 },
+      ]);
+      await expect(p.execute(stub().resolves(42))).to.be.rejectedWith(BrokenCircuitError);
+
+      clock.tick(args.pop()!.duration);
+      await p2.execute(stub().resolves(42));
+      expect(p2.state).to.equal(CircuitState.Closed);
+    });
+
+    it('restores half-open state with immediate retry', async () => {
+      // set time ahead because openedAt gets serialized to 0
+      clock.tick(1000);
+
+      p = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: new MyBreaker(0),
+        breaker: new ConsecutiveBreaker(2),
+      });
+
+      await openBreaker();
+      clock.tick(args.pop()!.duration);
+      args.length = 0;
+
+      p.execute(async () => {
+        await delay(1);
+        throw new MyException();
+      }).catch(() => {});
+      expect(p.state).to.equal(CircuitState.HalfOpen);
+
+      const p2 = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: new MyBreaker(0),
+        breaker: new ConsecutiveBreaker(2),
+        initialState: p.toJSON(),
+      });
+
+      expect(p2.state).to.equal(CircuitState.Open);
+      expect(args).to.deep.equal([
+        { duration: 1, attempt: 1 },
+        { duration: 2, attempt: 2 },
+      ]);
+
+      await p2.execute(stub().resolves(42));
+    });
+  });
 });
