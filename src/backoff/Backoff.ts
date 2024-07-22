@@ -3,8 +3,7 @@
  */
 export interface IBackoffFactory<T> {
   /**
-   * Returns the first backoff duration. Can return "undefined" to signal
-   * that we should not back off.
+   * Returns the first backoff duration.
    */
   next(context: T): IBackoff<T>;
 }

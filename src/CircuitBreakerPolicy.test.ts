@@ -1,13 +1,18 @@
 import { expect } from 'chai';
 import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
 import { promisify } from 'util';
+import { IBackoffFactory } from './backoff/Backoff';
+import { IterableBackoff } from './backoff/IterableBackoff';
 import { ConsecutiveBreaker } from './breaker/Breaker';
-import { CircuitBreakerPolicy, CircuitState } from './CircuitBreakerPolicy';
+import {
+  CircuitBreakerPolicy,
+  CircuitState,
+  IHalfOpenAfterBackoffContext,
+} from './CircuitBreakerPolicy';
 import { abortedSignal } from './common/abort';
 import { BrokenCircuitError, TaskCancelledError } from './errors/Errors';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError';
 import { circuitBreaker, handleAll, handleType } from './Policy';
-import { IterableBackoff } from './backoff/IterableBackoff';
 
 class MyException extends Error {}
 
@@ -115,8 +120,17 @@ describe('CircuitBreakerPolicy', () => {
   });
 
   it('resets the backoff when closing the circuit', async () => {
+    let args: { duration: number; attempt: number }[] = [];
     p = circuitBreaker(handleType(MyException), {
-      halfOpenAfter: new IterableBackoff([1000, 2000]),
+      halfOpenAfter: new (class MyBreaker implements IBackoffFactory<IHalfOpenAfterBackoffContext> {
+        constructor(public readonly duration: number) {}
+
+        next(context: IHalfOpenAfterBackoffContext) {
+          args.push({ duration: this.duration + 1, attempt: context.attempt });
+          expect('error' in context.result).to.be.true;
+          return new MyBreaker(this.duration + 1);
+        }
+      })(0),
       breaker: new ConsecutiveBreaker(2),
     });
     p.onReset(onReset);
@@ -124,25 +138,23 @@ describe('CircuitBreakerPolicy', () => {
 
     await openBreaker();
 
-    clock.tick(1000);
+    expect(args).to.deep.equal([{ duration: 1, attempt: 1 }]);
+    clock.tick(args.pop()!.duration);
 
-    const halfOpenTest1 = p.execute(stub().resolves(42));
-    expect(p.state).to.equal(CircuitState.HalfOpen);
-    expect(onHalfOpen).calledOnce;
-    expect(await halfOpenTest1).to.equal(42);
-    expect(p.state).to.equal(CircuitState.Closed);
-    expect(onReset).calledOnce;
+    await expect(p.execute(stub().throws(new MyException()))).to.be.rejectedWith(MyException);
+    expect(args).to.deep.equal([{ duration: 2, attempt: 2 }]);
+    clock.tick(args.pop()!.duration);
+
+    await p.execute(stub().resolves(42));
+    expect(args).to.be.empty;
 
     await openBreaker();
 
-    clock.tick(1000);
+    expect(args).to.deep.equal([{ duration: 1, attempt: 1 }]);
+    clock.tick(args.pop()!.duration);
 
-    const halfOpenTest2 = p.execute(stub().resolves(42));
-    expect(p.state).to.equal(CircuitState.HalfOpen);
-    expect(onHalfOpen).calledTwice;
-    expect(await halfOpenTest2).to.equal(42);
-    expect(p.state).to.equal(CircuitState.Closed);
-    expect(onReset).calledTwice;
+    await p.execute(stub().resolves(42));
+    expect(args).to.be.empty;
   });
 
   it('dedupes half-open tests', async () => {

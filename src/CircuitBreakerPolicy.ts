@@ -61,8 +61,18 @@ export interface ICircuitBreakerOptions {
 type InnerState =
   | { value: CircuitState.Closed }
   | { value: CircuitState.Isolated; counters: number }
-  | { value: CircuitState.Open; openedAt: number }
-  | { value: CircuitState.HalfOpen; test: Promise<any> };
+  | {
+      value: CircuitState.Open;
+      openedAt: number;
+      attemptNo: number;
+      backoff: IBackoff<IHalfOpenAfterBackoffContext>;
+    }
+  | {
+      value: CircuitState.HalfOpen;
+      test: Promise<any>;
+      attemptNo: number;
+      backoff: IBackoff<IHalfOpenAfterBackoffContext>;
+    };
 
 export class CircuitBreakerPolicy implements IPolicy {
   declare readonly _altReturn: never;
@@ -74,8 +84,6 @@ export class CircuitBreakerPolicy implements IPolicy {
   private readonly halfOpenAfterBackoffFactory: IBackoffFactory<IHalfOpenAfterBackoffContext>;
   private innerLastFailure?: FailureReason<unknown>;
   private innerState: InnerState = { value: CircuitState.Closed };
-  private openEnteredCount = 0;
-  private halfOpenAfterBackof: IBackoff<IHalfOpenAfterBackoffContext> | undefined;
 
   /**
    * Event emitted when the circuit breaker opens.
@@ -198,11 +206,16 @@ export class CircuitBreakerPolicy implements IPolicy {
         return this.execute(fn);
 
       case CircuitState.Open:
-        if (Date.now() - state.openedAt < (this.halfOpenAfterBackof?.duration ?? 0)) {
+        if (Date.now() - state.openedAt < state.backoff.duration) {
           throw new BrokenCircuitError();
         }
         const test = this.halfOpen(fn, signal);
-        this.innerState = { value: CircuitState.HalfOpen, test };
+        this.innerState = {
+          value: CircuitState.HalfOpen,
+          test,
+          backoff: state.backoff,
+          attemptNo: state.attemptNo + 1,
+        };
         this.stateChangeEmitter.emit(CircuitState.HalfOpen);
         return test;
 
@@ -245,12 +258,17 @@ export class CircuitBreakerPolicy implements IPolicy {
       return;
     }
 
-    this.innerState = { value: CircuitState.Open, openedAt: Date.now() };
+    const attemptNo =
+      this.innerState.value === CircuitState.HalfOpen ? this.innerState.attemptNo : 1;
+    const context = { attempt: attemptNo, result: reason, signal };
+    const backoff =
+      this.innerState.value === CircuitState.HalfOpen
+        ? this.innerState.backoff.next(context)
+        : this.halfOpenAfterBackoffFactory.next(context);
+
+    this.innerState = { value: CircuitState.Open, openedAt: Date.now(), backoff, attemptNo };
     this.breakEmitter.emit(reason);
     this.stateChangeEmitter.emit(CircuitState.Open);
-    const context = { attempt: ++this.openEnteredCount, result: reason, signal };
-    this.halfOpenAfterBackof =
-      this.halfOpenAfterBackof?.next(context) ?? this.halfOpenAfterBackoffFactory.next(context);
   }
 
   private close() {
@@ -258,8 +276,6 @@ export class CircuitBreakerPolicy implements IPolicy {
       this.innerState = { value: CircuitState.Closed };
       this.resetEmitter.emit();
       this.stateChangeEmitter.emit(CircuitState.Closed);
-      this.halfOpenAfterBackof = undefined;
-      this.openEnteredCount = 0;
     }
   }
 }

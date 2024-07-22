@@ -9,7 +9,7 @@ export class IterableBackoff implements IBackoffFactory<unknown> {
   /**
    * @inheritdoc
    */
-  public next() {
+  public next(_context: unknown) {
     return instance(this.durations, 0);
   }
 }
