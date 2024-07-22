@@ -1,6 +1,6 @@
 {
   "name": "cockatiel",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "A resilience and transient-fault-handling library that allows developers to express policies such as Backoff, Retry, Circuit Breaker, Timeout, Bulkhead Isolation, and Fallback in a fluent and thread-safe manner. Inspired by .NET Polly.",
   "main": "dist/index.js",
   "module": "dist/esm/index.js",
