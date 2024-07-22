@@ -7,7 +7,7 @@ export interface IDisposable {
   dispose(): void;
 }
 
-export const noopDisposable = { dispose: () => undefined };
+export const noopDisposable: IDisposable = { dispose: () => undefined };
 
 /**
  * Function that subscribes the method to receive data.
@@ -53,37 +53,50 @@ export namespace Event {
       return Promise.reject(new TaskCancelledError());
     }
 
-    return new Promise((resolve, reject) => {
-      const d1 = onAbort(signal)(() => {
-        d2.dispose();
-        reject(new TaskCancelledError());
-      });
+    const toDispose: IDisposable[] = [];
 
-      const d2 = once(event, data => {
-        d1.dispose();
-        resolve(data);
-      });
+    return new Promise<T>((resolve, reject) => {
+      const abortEvt = onAbort(signal);
+      toDispose.push(abortEvt);
+
+      toDispose.push(
+        abortEvt.event(() => {
+          reject(new TaskCancelledError());
+        }),
+      );
+
+      toDispose.push(
+        once(event, data => {
+          resolve(data);
+        }),
+      );
+    }).finally(() => {
+      for (const d of toDispose) {
+        d.dispose();
+      }
     });
   };
 }
 
 /** Creates an Event that fires when the signal is aborted. */
-export const onAbort = (signal: AbortSignal): Event<void> => {
+export const onAbort = (signal: AbortSignal): { event: Event<void> } & IDisposable => {
   const evt = new OneShotEvent<void>();
   if (signal.aborted) {
     evt.emit();
-    return evt.addListener;
+    return { event: evt.addListener, dispose: () => {} };
   }
+
+  const dispose = () => (signal as any).removeEventListener('abort', l);
 
   // @types/node is currently missing the event types on AbortSignal
   const l = () => {
     evt.emit();
-    (signal as any).removeEventListener('abort', l);
+    dispose();
   };
 
   (signal as any).addEventListener('abort', l);
 
-  return evt.addListener;
+  return { event: evt.addListener, dispose };
 };
 
 /**

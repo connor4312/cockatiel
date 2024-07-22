@@ -79,7 +79,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
     fn: (context: ICancellationContext, signal: AbortSignal) => PromiseLike<T> | T,
     signal?: AbortSignal,
   ): Promise<T> {
-    const aborter = deriveAbortController(signal);
+    const { ctrl: aborter, dispose: disposeAbort } = deriveAbortController(signal);
     const timer = setTimeout(() => aborter.abort(), this.duration);
     if (this.unref) {
       timer.unref();
@@ -88,7 +88,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
     const context = { signal: aborter.signal };
 
     const onceAborted = onAbort(aborter.signal);
-    const onCancelledListener = onceAborted(() => this.timeoutEmitter.emit());
+    const onCancelledListener = onceAborted.event(() => this.timeoutEmitter.emit());
 
     try {
       if (this.options.strategy === TimeoutStrategy.Cooperative) {
@@ -99,7 +99,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
         .invoke(async () =>
           Promise.race<T>([
             Promise.resolve(fn(context, aborter.signal)),
-            Event.toPromise(onceAborted).then(() => {
+            Event.toPromise(onceAborted.event).then(() => {
               throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);
             }),
           ]),
@@ -107,10 +107,12 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
         .then(returnOrThrow);
     } finally {
       onCancelledListener.dispose();
+      onceAborted.dispose();
       if (this.options.abortOnReturn !== false) {
         aborter.abort();
       }
       clearTimeout(timer);
+      disposeAbort();
     }
   }
 }
