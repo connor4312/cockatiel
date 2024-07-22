@@ -4,6 +4,8 @@
 
 - **feat:** allow hydration of circuit breaker `initialState` ([#89](https://github.com/connor4312/cockatiel/issues/89))
 - **feat:** allow passing a backoff algorithm to circuit breakers' `halfOpenAfter` ([#96](https://github.com/connor4312/cockatiel/issues/96))
+- **feat:** add new `CountBreaker` ([#93](https://github.com/connor4312/cockatiel/issues/93))
+- **feat:** provide the attempt number to retry's context ([#95](https://github.com/connor4312/cockatiel/issues/95))
 - **fix:** event listener leak in `timeout`
 
 ## 3.1.3
