@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.2.1
+
+- **fix:** restore breaker state when circuit state is restored
+
 ## 3.2.0
 
 - **feat:** allow hydration of circuit breaker `initialState` ([#89](https://github.com/connor4312/cockatiel/issues/89))

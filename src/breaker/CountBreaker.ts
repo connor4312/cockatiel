@@ -21,18 +21,46 @@ export interface ICountBreakerOptions {
   minimumNumberOfCalls?: number;
 }
 
+
+interface ICountBreakerState {
+  samples: (boolean | null)[];
+  currentSample: number;
+  failures: number;
+  successes: number;
+}
+
+
 export class CountBreaker implements IBreaker {
   private readonly threshold: number;
   private readonly minimumNumberOfCalls: number;
 
   /**
    * The samples in the sliding window. `true` means "success", `false` means
-   * "failure" and `undefined` means that there is no sample yet.
+   * "failure" and `null` means that there is no sample yet.
    */
-  private readonly samples: (boolean | undefined)[];
+  private samples: (boolean | null)[];
   private successes = 0;
   private failures = 0;
   private currentSample = 0;
+
+  /**
+   * @inheritdoc
+   */
+  public get state(): unknown {
+    return {
+      samples: this.samples,
+      currentSample: this.currentSample,
+      failures: this.failures,
+      successes: this.successes,
+    } satisfies ICountBreakerState;
+  }
+
+  /**
+   * @inheritdoc
+   */
+  public set state(value: unknown) {
+    Object.assign(this, value);
+  }
 
   /**
    * CountBreaker breaks if more than `threshold` percentage of the last `size`
@@ -59,7 +87,7 @@ export class CountBreaker implements IBreaker {
 
     this.threshold = threshold;
     this.minimumNumberOfCalls = minimumNumberOfCalls;
-    this.samples = Array.from<undefined>({ length: size }).fill(undefined);
+    this.samples = Array.from({ length: size }, () => null);
   }
 
   /**
@@ -97,9 +125,7 @@ export class CountBreaker implements IBreaker {
   }
 
   private reset() {
-    for (let i = 0; i < this.samples.length; i++) {
-      this.samples[i] = undefined;
-    }
+    this.samples.fill(null);
     this.successes = 0;
     this.failures = 0;
   }

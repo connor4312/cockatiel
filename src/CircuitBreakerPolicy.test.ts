@@ -300,6 +300,26 @@ describe('CircuitBreakerPolicy', () => {
       await p2.execute(stub().resolves(42));
     });
 
+    it('restores breaker state', async () => {
+      p = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: new MyBreaker(0),
+        breaker: new ConsecutiveBreaker(2),
+      });
+
+      const s = stub().throws(new MyException());
+      await expect(p.execute(s)).to.be.rejectedWith(MyException);
+
+      const p2 = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: new MyBreaker(0),
+        breaker: new ConsecutiveBreaker(2),
+        initialState: p.toJSON(),
+      });
+
+      expect(p2.state).to.equal(CircuitState.Closed);
+      await expect(p2.execute(s)).to.be.rejectedWith(MyException);
+      expect(p2.state).to.equal(CircuitState.Open);
+    });
+
     it('restores open state', async () => {
       p = circuitBreaker(handleType(MyException), {
         halfOpenAfter: new MyBreaker(0),

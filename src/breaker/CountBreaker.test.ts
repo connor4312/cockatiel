@@ -73,6 +73,25 @@ describe('CountBreaker', () => {
       expect(state.currentSample).to.equal(4);
       expect(state.samples).to.deep.equal([true, false, true, true, true]);
     });
+
+
+    it('serializes and deserializes', () => {
+      let b = new CountBreaker({ threshold: 0.5, size: 5 });
+      for (let i = 0; i < 9; i++) {
+        if (i % 3 === 0) {
+          b.failure(CircuitState.Closed);
+        } else {
+          b.success(CircuitState.Closed);
+        }
+        const state = b.state;
+        b = new CountBreaker({ threshold: 0.5, size: 5 });
+        b.state = state;
+      }
+
+      const state = getState(b);
+      expect(state.currentSample).to.equal(4);
+      expect(state.samples).to.deep.equal([true, false, true, true, true]);
+    });
   });
 
   describe('functionality', () => {

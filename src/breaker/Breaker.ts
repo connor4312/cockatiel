@@ -5,6 +5,12 @@ import { CircuitState } from '../CircuitBreakerPolicy';
  */
 export interface IBreaker {
   /**
+   * Gets or sets the internal state of the breaker. Used for serialization
+   * with {@link CircuitBreaker.toJSON}.
+   */
+  state: unknown;
+
+  /**
    * Called when a call succeeds.
    */
   success(state: CircuitState): void;
@@ -15,6 +21,7 @@ export interface IBreaker {
   failure(state: CircuitState): boolean;
 }
 
-export * from './SamplingBreaker';
 export * from './ConsecutiveBreaker';
 export * from './CountBreaker';
+export * from './SamplingBreaker';
+

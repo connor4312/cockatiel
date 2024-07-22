@@ -80,6 +80,11 @@ type InnerState =
       backoff: IBackoff<IHalfOpenAfterBackoffContext>;
     };
 
+interface ISerializedState {
+  ownState: Partial<InnerState>;
+  breakerState: unknown;
+}
+
 export class CircuitBreakerPolicy implements IPolicy {
   declare readonly _altReturn: never;
 
@@ -146,7 +151,9 @@ export class CircuitBreakerPolicy implements IPolicy {
         : options.halfOpenAfter;
 
     if (options.initialState) {
-      this.innerState = options.initialState as InnerState;
+      const initialState = options.initialState as ISerializedState;
+      this.innerState = initialState.ownState as InnerState;
+      this.options.breaker.state = initialState.breakerState;
 
       if (
         this.innerState.value === CircuitState.Open ||
@@ -265,21 +272,24 @@ export class CircuitBreakerPolicy implements IPolicy {
    */
   public toJSON(): unknown {
     const state = this.innerState;
+    let ownState: Partial<InnerState>;
     if (state.value === CircuitState.HalfOpen) {
-      return {
+      ownState = {
         value: CircuitState.Open,
         openedAt: 0,
         attemptNo: state.attemptNo,
-      } satisfies Partial<InnerState>;
+      };
     } else if (state.value === CircuitState.Open) {
-      return {
+      ownState = {
         value: CircuitState.Open,
         openedAt: state.openedAt,
         attemptNo: state.attemptNo,
-      } satisfies Partial<InnerState>;
+      };
     } else {
-      return state;
+      ownState = state;
     }
+
+    return { ownState, breakerState: this.options.breaker.state } satisfies ISerializedState;
   }
 
   private async halfOpen<T>(

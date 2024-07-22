@@ -26,6 +26,13 @@ export interface ISamplingBreakerOptions {
   minimumRps?: number;
 }
 
+interface ISamplingBreakerState {
+  windows: IWindow[];
+  currentWindow: number;
+  currentFailures: number;
+  currentSuccesses: number;
+}
+
 export class SamplingBreaker implements IBreaker {
   private readonly threshold: number;
   private readonly minimumRpms: number;
@@ -36,6 +43,25 @@ export class SamplingBreaker implements IBreaker {
   private currentWindow = 0;
   private currentFailures = 0;
   private currentSuccesses = 0;
+
+  /**
+   * @inheritdoc
+   */
+  public get state(): unknown {
+    return {
+      windows: this.windows,
+      currentWindow: this.currentWindow,
+      currentFailures: this.currentFailures,
+      currentSuccesses: this.currentSuccesses,
+    } satisfies ISamplingBreakerState;
+  }
+
+  /**
+   * @inheritdoc
+   */
+  public set state(value: unknown) {
+    Object.assign(this, value);
+  }
 
   /**
    * SamplingBreaker breaks if more than `threshold` percentage of calls over the

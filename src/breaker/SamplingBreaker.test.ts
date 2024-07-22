@@ -100,7 +100,38 @@ describe('SamplingBreaker', () => {
         { failures: 4, successes: 8, startedAt: 4000 },
       ]);
     });
+
+    it('serializes and deserializes', () => {
+      for (let i = 0; i < 7; i++) {
+        for (let k = 0; k < i; k++) {
+          b.failure(CircuitState.Closed);
+          b.success(CircuitState.Closed);
+          b.success(CircuitState.Closed);
+        }
+
+        clock.tick(1000);
+        const b2 = new SamplingBreaker({ threshold: 0.5, duration: 5_000, minimumRps: 3 });
+        b2.state = b.state;
+        b = b2;
+      }
+
+      expect(getState(b)).to.containSubset({
+        currentFailures: 20,
+        currentSuccesses: 40,
+        currentWindow: 1,
+      });
+      expect(getState(b).windows).to.deep.equal([
+        { failures: 5, successes: 10, startedAt: 5000 },
+        { failures: 6, successes: 12, startedAt: 6000 },
+        { failures: 2, successes: 4, startedAt: 2000 },
+        { failures: 3, successes: 6, startedAt: 3000 },
+        { failures: 4, successes: 8, startedAt: 4000 },
+      ]);
+    });
   });
+
+
+
 
   describe('functionality', () => {
     let b: SamplingBreaker;

@@ -1,7 +1,10 @@
 import { IBreaker } from './Breaker';
 
 export class ConsecutiveBreaker implements IBreaker {
-  private count = 0;
+  /**
+   * @inheritdoc
+   */
+  public state = 0;
 
   /**
    * ConsecutiveBreaker breaks if more than `threshold` exceptions are received
@@ -13,13 +16,13 @@ export class ConsecutiveBreaker implements IBreaker {
    * @inheritdoc
    */
   public success() {
-    this.count = 0;
+    this.state = 0;
   }
 
   /**
    * @inheritdoc
    */
   public failure() {
-    return ++this.count >= this.threshold;
+    return ++this.state >= this.threshold;
   }
 }
