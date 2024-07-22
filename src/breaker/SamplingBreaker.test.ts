@@ -130,9 +130,6 @@ describe('SamplingBreaker', () => {
     });
   });
 
-
-
-
   describe('functionality', () => {
     let b: SamplingBreaker;
     let clock: SinonFakeTimers;

@@ -74,7 +74,6 @@ describe('CountBreaker', () => {
       expect(state.samples).to.deep.equal([true, false, true, true, true]);
     });
 
-
     it('serializes and deserializes', () => {
       let b = new CountBreaker({ threshold: 0.5, size: 5 });
       for (let i = 0; i < 9; i++) {

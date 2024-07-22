@@ -21,14 +21,12 @@ export interface ICountBreakerOptions {
   minimumNumberOfCalls?: number;
 }
 
-
 interface ICountBreakerState {
   samples: (boolean | null)[];
   currentSample: number;
   failures: number;
   successes: number;
 }
-
 
 export class CountBreaker implements IBreaker {
   private readonly threshold: number;

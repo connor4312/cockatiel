@@ -24,4 +24,3 @@ export interface IBreaker {
 export * from './ConsecutiveBreaker';
 export * from './CountBreaker';
 export * from './SamplingBreaker';
-
