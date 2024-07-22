@@ -15,7 +15,10 @@ export class FallbackPolicy<AltReturn> implements IPolicy<IDefaultPolicyContext,
    */
   public readonly onFailure = this.executor.onFailure;
 
-  constructor(private readonly executor: ExecuteWrapper, private readonly value: () => AltReturn) {}
+  constructor(
+    private readonly executor: ExecuteWrapper,
+    private readonly value: () => AltReturn,
+  ) {}
 
   /**
    * Executes the given function.

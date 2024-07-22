@@ -72,7 +72,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`retry.onSuccess(callback)`](#retryonsuccesscallback)
   - [`retry.onFailure(callback)`](#retryonfailurecallback)
   - [`retry.onGiveUp(callback)`](#retryongiveupcallback)
-- [`circuitBreaker(policy, { halfOpenAfter, breaker })`](#circuitbreakerpolicy--halfopenafter-breaker-initialstate-)
+- [`circuitBreaker(policy, { halfOpenAfter, breaker[, initialState] })`](#circuitbreakerpolicy--halfopenafter-breaker-initialstate-)
   - [Breakers](#breakers)
     - [`ConsecutiveBreaker`](#consecutivebreaker)
     - [`CountBreaker`](#countbreaker)
@@ -86,6 +86,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`breaker.onSuccess(callback)`](#breakeronsuccesscallback)
   - [`breaker.onFailure(callback)`](#breakeronfailurecallback)
   - [`breaker.isolate()`](#breakerisolate)
+  - [`breaker.toJSON()`](#breakertojson)
 - [`timeout(duration, strategy)`](#timeoutduration-strategy)
   - [`timeout.dangerouslyUnref()`](#timeoutdangerouslyunref)
   - [`timeout.execute(fn[, signal])`](#timeoutexecutefn-signal)
@@ -579,6 +580,7 @@ To create a breaker, you use a [Policy](#Policy) like you normally would, and ca
   You may also pass a backoff strategy instead of a constant number of milliseconds if you wish to increase the interval between consecutive failing half-open checks.
 
 - The `breaker` is the [breaker policy](#breakers) which controls when the circuit opens.
+
 - The `initialState` option can be passed if you're hydrating the breaker from state collectiond from previous execution using [breaker.toJSON()](#breakertojson).
 
 Calls to `execute()` while the circuit is open (not taking requests) will throw a `BrokenCircuitError`.

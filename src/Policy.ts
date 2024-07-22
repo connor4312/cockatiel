@@ -106,15 +106,16 @@ export interface IMergedPolicy<A extends IDefaultPolicyContext, B, W extends IPo
   readonly wrapped: W;
 }
 
-type MergePolicies<A, B> = A extends IPolicy<infer A1, any>
-  ? B extends IPolicy<infer B1, any>
-    ? IMergedPolicy<
-        A1 & B1,
-        A['_altReturn'] | B['_altReturn'],
-        B extends IMergedPolicy<any, any, infer W> ? [A, ...W] : [A, B]
-      >
-    : never
-  : never;
+type MergePolicies<A, B> =
+  A extends IPolicy<infer A1, any>
+    ? B extends IPolicy<infer B1, any>
+      ? IMergedPolicy<
+          A1 & B1,
+          A['_altReturn'] | B['_altReturn'],
+          B extends IMergedPolicy<any, any, infer W> ? [A, ...W] : [A, B]
+        >
+      : never
+    : never;
 
 export class Policy {
   /**

@@ -53,7 +53,10 @@ export class BulkheadPolicy implements IPolicy {
   /**
    * Bulkhead limits concurrent requests made.
    */
-  constructor(private readonly capacity: number, private readonly queueCapacity: number) {}
+  constructor(
+    private readonly capacity: number,
+    private readonly queueCapacity: number,
+  ) {}
 
   /**
    * Executes the given function.
