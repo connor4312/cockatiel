@@ -574,6 +574,8 @@ Circuit breakers stop execution for a period of time after a failure threshold h
 
 To create a breaker, you use a [Policy](#Policy) like you normally would, and call `.circuitBreaker()`. The first argument is the number of milliseconds after which we should try to close the circuit after failure ('closing the circuit' means restarting requests). The second argument is the breaker policy.
 
+You may also pass a backoff strategy instead of a constant number of milliseconds if you wish to increase the interval between consecutive failing half-open checks.
+
 Calls to `execute()` while the circuit is open (not taking requests) will throw a `BrokenCircuitError`.
 
 ```js
@@ -583,6 +585,7 @@ import {
   BrokenCircuitError,
   ConsecutiveBreaker,
   SamplingBreaker,
+  ExponentialBackoff,
 } from 'cockatiel';
 
 // Break if more than 20% of requests fail in a 30 second time window:
@@ -591,9 +594,9 @@ const breaker = circuitBreaker(handleAll, {
   breaker: new SamplingBreaker({ threshold: 0.2, duration: 30 * 1000 }),
 });
 
-// Break if more than 5 requests in a row fail:
+// Break if more than 5 requests in a row fail, and use a backoff for retry attempts:
 const breaker = circuitBreaker(handleAll, {
-  halfOpenAfter: 10 * 1000,
+  halfOpenAfter: new ExponentialBackoff(),
   breaker: new ConsecutiveBreaker(5),
 });
 

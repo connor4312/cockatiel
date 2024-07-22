@@ -1,7 +1,8 @@
 # Changelog
 
-## 3.1.4
+## 3.2.0
 
+- **feat:** allow passing a backoff algorithm to circuit breakers' `halfOpenAfter` ([#96](https://github.com/connor4312/cockatiel/issues/96))
 - **fix:** event listener leak in `timeout`
 
 ## 3.1.3
