@@ -818,7 +818,7 @@ Creates a timeout policy. The duration specifies how long to wait before timing 
 ```js
 import { TimeoutStrategy, timeout, TaskCancelledError } from 'cockatiel';
 
-const timeout = timeout(2000, TimeoutStrategy.Cooperative);
+const timeout = timeout(2000, TimeoutStrategy.Aggressive);
 
 export async function handleRequest() {
   try {
