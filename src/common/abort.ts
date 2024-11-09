@@ -22,10 +22,10 @@ export const deriveAbortController = (
   }
 
   if (signal.aborted) {
-    ctrl.abort();
+    ctrl.abort(signal.reason);
   } else {
     const abortEvt = onAbort(signal);
-    abortEvt.event(() => ctrl.abort());
+    abortEvt.event(reason => ctrl.abort(reason));
     dispose = abortEvt.dispose;
   }
 

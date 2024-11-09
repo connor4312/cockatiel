@@ -79,10 +79,10 @@ export namespace Event {
 }
 
 /** Creates an Event that fires when the signal is aborted. */
-export const onAbort = (signal: AbortSignal): { event: Event<void> } & IDisposable => {
-  const evt = new OneShotEvent<void>();
+export const onAbort = (signal: AbortSignal): { event: Event<unknown> } & IDisposable => {
+  const evt = new OneShotEvent<unknown>();
   if (signal.aborted) {
-    evt.emit();
+    evt.emit(signal.reason);
     return { event: evt.addListener, dispose: () => {} };
   }
 
@@ -90,7 +90,7 @@ export const onAbort = (signal: AbortSignal): { event: Event<void> } & IDisposab
 
   // @types/node is currently missing the event types on AbortSignal
   const l = () => {
-    evt.emit();
+    evt.emit(signal.reason);
     dispose();
   };
 
