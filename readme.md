@@ -473,7 +473,7 @@ export interface IRetryBackoffContext<ReturnType> {
    * The result of the last method call. Either a thrown error, or a value
    * that we determined should be retried upon.
    */
-  result: { error: Error } | { value: ReturnType };
+  result: { error: unknown } | { value: ReturnType };
 }
 ```
 

@@ -17,7 +17,7 @@ const always = () => true;
 const never = () => false;
 
 export interface IBasePolicyOptions {
-  errorFilter: (error: Error) => boolean;
+  errorFilter: (error: unknown) => boolean;
   resultFilter: (result: unknown) => boolean;
 }
 
@@ -25,7 +25,7 @@ export interface IBasePolicyOptions {
  * The reason for a call failure. Either an error, or the a value that was
  * marked as a failure (when using result filtering).
  */
-export type FailureReason<ReturnType> = { error: Error } | { value: ReturnType };
+export type FailureReason<ReturnType> = { error: unknown } | { value: ReturnType };
 
 /**
  * Event emitted on the `onFailure` calls.
@@ -165,7 +165,7 @@ export class Policy {
    *  .execute(() => getJsonFrom('https://example.com'));
    * ```
    */
-  public orWhen(predicate: (error: Error) => boolean) {
+  public orWhen(predicate: (error: unknown) => boolean) {
     return new Policy({
       ...this.options,
       errorFilter: e => this.options.errorFilter(e) || predicate(e),
@@ -237,7 +237,7 @@ export function handleType<T>(cls: Constructor<T>, predicate?: (error: T) => boo
 /**
  * See {@link Policy.orWhen} for usage.
  */
-export function handleWhen(predicate: (error: Error) => boolean) {
+export function handleWhen(predicate: (error: unknown) => boolean) {
   return new Policy({ errorFilter: predicate, resultFilter: never });
 }
 /**

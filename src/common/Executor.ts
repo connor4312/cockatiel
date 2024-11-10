@@ -34,7 +34,7 @@ export class ExecuteWrapper {
   public readonly onFailure = this.failureEmitter.addListener;
 
   constructor(
-    private readonly errorFilter: (error: Error) => boolean = () => false,
+    private readonly errorFilter: (error: unknown) => boolean = () => false,
     private readonly resultFilter: (result: unknown) => boolean = () => false,
   ) {}
 
@@ -62,9 +62,8 @@ export class ExecuteWrapper {
       }
 
       return { value };
-    } catch (rawError) {
-      const error = rawError as Error;
-      const handled = this.errorFilter(error as Error);
+    } catch (error) {
+      const handled = this.errorFilter(error);
       if (stopwatch) {
         this.failureEmitter.emit({ duration: stopwatch(), handled, reason: { error } });
       }

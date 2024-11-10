@@ -10,7 +10,7 @@ interface IQueueItem<T> {
   signal: AbortSignal;
   fn(context: IDefaultPolicyContext): Promise<T> | T;
   resolve(value: T): void;
-  reject(error: Error): void;
+  reject(error: unknown): void;
 }
 
 export class BulkheadPolicy implements IPolicy {
