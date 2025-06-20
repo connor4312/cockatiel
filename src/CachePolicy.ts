@@ -31,8 +31,8 @@ export class CachePolicy implements IPolicy {
     signal: AbortSignal = neverAbortedSignal,
     options?: {
       key?: string;
-      shouldCache?: (value: T) => boolean | PromiseLike<boolean>;
       ttl?: number;
+      shouldCache?: (value: T) => boolean | PromiseLike<boolean>;
     },
   ): Promise<T> {
     const cacheKey = options?.key ?? fn.name;
