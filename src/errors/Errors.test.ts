@@ -7,6 +7,8 @@ import {
   isHydratingCircuitError,
   isIsolatedCircuitError,
   isTaskCancelledError,
+  isTaskTimeoutError,
+  TaskTimeoutError,
 } from './Errors';
 import { HydratingCircuitError } from './HydratingCircuitError';
 import { IsolatedCircuitError } from './IsolatedCircuitError';
@@ -130,6 +132,34 @@ describe('Errors', () => {
 
     it('returns false for an instance of TaskCancelledError', () => {
       expect(isHydratingCircuitError(new TaskCancelledError())).to.be.false;
+    });
+  });
+
+  describe('TaskTimeoutError', () => {
+    const error = new TaskTimeoutError(3);
+
+    it('returns true for an instance of TaskTimeoutError', () => {
+      expect(isTaskTimeoutError(error)).to.be.true;
+    });
+
+    it('returns false for an instance of TaskCancelledError', () => {
+      expect(isTaskCancelledError(error)).to.be.false;
+    });
+
+    it('returns false for an instance of BrokenCircuitError', () => {
+      expect(isTaskCancelledError(new BrokenCircuitError())).to.be.false;
+    });
+
+    it('returns false for an instance of BulkheadRejectedError', () => {
+      expect(isTaskCancelledError(new BulkheadRejectedError(0, 0))).to.be.false;
+    });
+
+    it('returns false for an instance of IsolatedCircuitError', () => {
+      expect(isTaskCancelledError(new IsolatedCircuitError())).to.be.false;
+    });
+
+    it('returns false for an instance of HydratingCircuitError', () => {
+      expect(isTaskCancelledError(new HydratingCircuitError())).to.be.false;
     });
   });
 });

@@ -2,7 +2,15 @@ import { deriveAbortController } from './common/abort';
 import { Event, EventEmitter, onAbort } from './common/Event';
 import { ExecuteWrapper, returnOrThrow } from './common/Executor';
 import { TaskCancelledError } from './errors/TaskCancelledError';
+import { TaskTimeoutError } from './errors/TaskTimeoutError';
 import { IPolicy } from './Policy';
+
+/**
+ * @description abort reason for timeout task
+ */
+const kTimeoutReason = Symbol('TimeoutReason');
+const isTimeoutAborted = (reason?: string | symbol): reason is typeof kTimeoutReason =>
+  'symbol' === typeof reason && reason === kTimeoutReason;
 
 export enum TimeoutStrategy {
   /**
@@ -80,7 +88,7 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
     signal?: AbortSignal,
   ): Promise<T> {
     const { ctrl: aborter, dispose: disposeAbort } = deriveAbortController(signal);
-    const timer = setTimeout(() => aborter.abort(), this.duration);
+    const timer = setTimeout(() => aborter.abort(kTimeoutReason), this.duration);
     if (this.unref) {
       timer.unref();
     }
@@ -99,9 +107,13 @@ export class TimeoutPolicy implements IPolicy<ICancellationContext> {
         .invoke(async () =>
           Promise.race<T>([
             Promise.resolve(fn(context, aborter.signal)),
-            Event.toPromise(onceAborted.event).then(() => {
-              throw new TaskCancelledError(`Operation timed out after ${this.duration}ms`);
-            }),
+            Event.toPromise(onceAborted.event as Event<string | symbol>).then(
+              (reason?: string | symbol) => {
+                throw isTimeoutAborted(reason)
+                  ? new TaskTimeoutError(this.duration)
+                  : new TaskCancelledError(reason as string);
+              },
+            ),
           ]),
         )
         .then(returnOrThrow);

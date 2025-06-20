@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import { ExponentialBackoff } from './backoff/ExponentialBackoff';
 import { runInChild } from './common/util.test';
 import { TaskCancelledError } from './errors/TaskCancelledError';
+import { TaskTimeoutError } from './errors/TaskTimeoutError';
 import { handleAll, retry, timeout, wrap } from './Policy';
 import { TimeoutPolicy, TimeoutStrategy } from './TimeoutPolicy';
 
@@ -40,7 +41,7 @@ describe('TimeoutPolicy', () => {
             expect(signal.aborted).to.be.true;
           })()),
       ),
-    ).to.eventually.be.rejectedWith(TaskCancelledError);
+    ).to.eventually.be.rejectedWith(TaskTimeoutError);
 
     await verified!;
   });
@@ -147,7 +148,7 @@ describe('TimeoutPolicy', () => {
     });
 
     it('emits a timeout event (aggressive)', async () => {
-      await expect(agg.execute(() => delay(3))).to.be.rejectedWith(TaskCancelledError);
+      await expect(agg.execute(() => delay(3))).to.be.rejectedWith(TaskTimeoutError);
       expect(onSuccess).to.not.have.been.called;
       expect(onTimeout).to.have.been.called;
       expect(onFailure).to.have.been.called;
@@ -228,5 +229,16 @@ describe('TimeoutPolicy', () => {
     await policy.execute(() => func(), sig);
 
     expect(listenerCount).to.eq(0);
+  });
+
+  it('user-cancelled task should be rejected with TaskCancelledError', async () => {
+    const aborter = new AbortController();
+    const policy = timeout(50, TimeoutStrategy.Aggressive);
+    const p = policy.execute(async () => {
+      await delay(2);
+    }, aborter.signal);
+
+    aborter.abort();
+    await expect(p).to.eventually.be.rejectedWith(TaskCancelledError);
   });
 });
