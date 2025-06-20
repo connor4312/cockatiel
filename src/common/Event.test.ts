@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { stub } from 'sinon';
 import { TaskCancelledError } from '../errors/TaskCancelledError';
 import { abortedSignal } from './abort';
-import { Event, EventEmitter, MemorizingEventEmitter } from './Event';
+import { Event, EventEmitter, MemorizingEventEmitter, onAbort } from './Event';
 
 describe('Event', () => {
   it('emits events', () => {
@@ -90,5 +90,38 @@ describe('Event', () => {
     const v = Event.toPromise(emitter.addListener, abortedSignal);
     await expect(v).to.eventually.be.rejectedWith(TaskCancelledError);
     expect(emitter.size).to.equal(0);
+  });
+});
+
+describe('onAbort', () => {
+  it('aborts with reason', () => {
+    const abortReason = 'REASON';
+    const aborter = new AbortController();
+    const { event: evt } = onAbort(aborter.signal);
+    evt(reason => {
+      expect(reason).to.equal(abortReason);
+    });
+    aborter.abort(abortReason);
+    expect(aborter.signal.aborted).to.be.true;
+  });
+
+  it('converted to promise and pass reason to promise', async () => {
+    const abortReason = 'REASON';
+    const aborter = new AbortController();
+    const { event: evt } = onAbort(aborter.signal);
+    const v = Event.toPromise(evt);
+
+    aborter.abort(abortReason);
+    await expect(v).to.eventually.equal(abortReason);
+  });
+
+  it('converted to promise and pass reason (as symbol) to promise', async () => {
+    const abortReason = Symbol('REASON');
+    const aborter = new AbortController();
+    const { event: evt } = onAbort(aborter.signal);
+    const v = Event.toPromise(evt);
+
+    aborter.abort(abortReason);
+    await expect(v).to.eventually.equal(abortReason);
   });
 });
