@@ -21,6 +21,7 @@
       "chai-subset",
       "sinon-chai",
       "chai-as-promised"
-    ]
+    ],
+    "skipLibCheck": true
   }
 }
