@@ -1,4 +1,5 @@
 import type { Cache } from 'cache-manager';
+import { randomBytes } from 'node:crypto';
 import { neverAbortedSignal } from './common/abort';
 import { ExecuteWrapper } from './common/Executor';
 import { IDefaultPolicyContext, IPolicy } from './Policy';
@@ -21,6 +22,9 @@ export class CachePolicy implements IPolicy {
    */
   public readonly onSuccess = this.executor.onSuccess;
 
+  protected readonly defaultHash = randomBytes(20).toString('hex');
+  protected readonly defaultCacheKey = `${this.constructor.name}::${this.defaultHash}`;
+
   constructor(
     private readonly cache: CacheObject,
     private readonly executor = new ExecuteWrapper(),
@@ -35,7 +39,10 @@ export class CachePolicy implements IPolicy {
       shouldCache?: (value: T) => boolean | PromiseLike<boolean>;
     },
   ): Promise<T> {
-    const cacheKey = options?.key ?? fn.name;
+    const cacheKey =
+      options?.key ||
+      (fn.name && `${this.constructor.name}::${fn.name}::${this.defaultHash}`) ||
+      this.defaultCacheKey;
     const shouldCache = options?.shouldCache ?? ((_value: T) => true);
 
     const cachedValue = await this.cache.get<T>(cacheKey);
