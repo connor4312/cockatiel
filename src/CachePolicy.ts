@@ -30,6 +30,11 @@ export class CachePolicy implements IPolicy {
     private readonly executor = new ExecuteWrapper(),
   ) {}
 
+  /**
+   * @description You should provide the cache key in the option or pass a named function to use as the cache key.
+   * Otherwise the cache policy will use the default cache key which may cause unexpected behavior due to shared cache keys.
+   * Unless that is intended behavior.
+   */
   public async execute<T>(
     fn: (context: IDefaultPolicyContext) => T | PromiseLike<T>,
     signal: AbortSignal = neverAbortedSignal,
