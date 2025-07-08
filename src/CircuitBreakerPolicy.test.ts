@@ -16,7 +16,7 @@ import { circuitBreaker, handleAll, handleType } from './Policy';
 
 class MyException extends Error {}
 
-const delay = promisify(setTimeout);
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 describe('CircuitBreakerPolicy', () => {
   let p: CircuitBreakerPolicy;
@@ -180,7 +180,8 @@ describe('CircuitBreakerPolicy', () => {
       expect(p.execute(b)).to.eventually.equal(2),
     ];
 
-    clock.tick(10);
+    // Use tickAsync for proper async handling
+    await clock.tickAsync(10);
 
     await Promise.all(todo);
   });
@@ -205,7 +206,8 @@ describe('CircuitBreakerPolicy', () => {
       expect(p.execute(b)).to.be.rejectedWith(BrokenCircuitError),
     ];
 
-    clock.tick(10);
+    // Use tickAsync for proper async handling
+    await clock.tickAsync(10);
 
     await Promise.all(todo);
   });

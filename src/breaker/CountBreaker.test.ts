@@ -1,9 +1,6 @@
-import { expect, use } from 'chai';
-import * as subset from 'chai-subset';
+import { expect } from 'chai';
 import { CircuitState } from '../CircuitBreakerPolicy';
 import { CountBreaker } from './CountBreaker';
-
-use(subset);
 
 const getState = (b: CountBreaker) => {
   const untyped: any = b;

@@ -4,39 +4,47 @@
   "description": "A resilience and transient-fault-handling library that allows developers to express policies such as Backoff, Retry, Circuit Breaker, Timeout, Bulkhead Isolation, and Fallback in a fluent and thread-safe manner. Inspired by .NET Polly.",
   "main": "dist/index.js",
   "module": "dist/esm/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./backoff": {
+      "import": "./dist/esm/backoff/index.js",
+      "require": "./dist/backoff/index.js",
+      "types": "./dist/backoff/index.d.ts"
+    },
+    "./breaker": {
+      "import": "./dist/esm/breaker/index.js",
+      "require": "./dist/breaker/index.js",
+      "types": "./dist/breaker/index.d.ts"
+    },
+    "./errors": {
+      "import": "./dist/esm/errors/index.js",
+      "require": "./dist/errors/index.js",
+      "types": "./dist/errors/index.d.ts"
+    }
+  },
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "sideEffects": false,
   "scripts": {
     "prepublishOnly": "npm run compile",
-    "test": "rimraf dist && tsc && npm run test:unit && npm run test:fmt && npm run test:md",
-    "test:cover": "rimraf dist && tsc && nyc npm run test:unit",
-    "test:unit": "mocha",
+    "test": "npm run test:unit && npm run test:fmt && npm run test:md",
+    "test:cover": "vitest run --coverage",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "bench": "vitest bench",
+    "bench:watch": "vitest bench --watch",
+    "bench:simple": "node src/simple-benchmark.js",
+    "bench:compare": "./benchmark-comparison.sh",
     "test:fmt": "prettier --list-different \"src/**/*.ts\" \"*.md\"",
     "test:md": "remark -f readme.md -q",
     "fmt": "remark readme.md -f -o readme.md && prettier --write \"src/**/*.ts\" \"*.md\"",
     "compile": "rimraf dist && tsc && tsc -p tsconfig.esm.json",
     "watch": "rimraf dist && tsc --watch"
-  },
-  "nyc": {
-    "all": true,
-    "instrument": true,
-    "include": [
-      "dist/**/*.js",
-      "src/**/*.ts"
-    ],
-    "extension": [
-      ".ts"
-    ],
-    "reporter": [
-      "cobertura",
-      "text-summary",
-      "html"
-    ],
-    "exclude": [
-      "**/*.test.{ts,js}"
-    ]
   },
   "repository": {
     "type": "git",
@@ -60,27 +68,23 @@
   },
   "homepage": "https://github.com/connor4312/cockatiel#readme",
   "devDependencies": {
-    "@types/chai": "^4.3.1",
-    "@types/chai-as-promised": "^7.1.5",
-    "@types/chai-subset": "^1.3.3",
-    "@types/mocha": "^9.1.1",
-    "@types/node": "^16.11.7",
-    "@types/sinon": "^10.0.11",
-    "@types/sinon-chai": "^3.2.8",
-    "chai": "^4.3.6",
-    "chai-as-promised": "^7.1.1",
+    "@types/chai": "^5.2.2",
+    "@types/node": "^24.0.10",
+    "@types/sinon": "^17.0.4",
+    "@types/sinon-chai": "^4.0.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "chai": "^5.2.0",
+    "chai-as-promised": "^8.0.1",
     "chai-subset": "^1.6.0",
-    "mocha": "^10.0.0",
-    "nyc": "^15.1.0",
-    "prettier": "^3.3.3",
-    "remark-cli": "^10.0.1",
-    "remark-toc": "^8.0.1",
-    "remark-validate-links": "^11.0.2",
-    "rimraf": "^3.0.2",
-    "sinon": "^14.0.0",
-    "sinon-chai": "^3.7.0",
-    "source-map-support": "^0.5.21",
-    "typescript": "^5.5.3"
+    "prettier": "^3.6.2",
+    "remark-cli": "^12.0.1",
+    "remark-toc": "^9.0.0",
+    "remark-validate-links": "^13.1.0",
+    "rimraf": "^6.0.1",
+    "sinon": "^21.0.0",
+    "sinon-chai": "^4.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.8"
   },
   "prettier": {
     "printWidth": 100,

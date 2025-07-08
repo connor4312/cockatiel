@@ -224,11 +224,32 @@ export const noop = new NoopPolicy();
 
 /**
  * A policy that handles all errors.
+ * @example
+ * ```ts
+ * import { retry, handleAll } from 'cockatiel';
+ *
+ * const retryPolicy = retry(handleAll, { maxAttempts: 3 });
+ * const result = await retryPolicy.execute(() => fetch('https://api.example.com/data'));
+ * ```
  */
 export const handleAll = new Policy({ errorFilter: always, resultFilter: never });
 
 /**
- * See {@link Policy.orType} for usage.
+ * Creates a policy that handles errors of a specific type.
+ * @param cls - The error class constructor to handle
+ * @param predicate - Optional predicate to further filter errors
+ * @example
+ * ```ts
+ * import { retry, handleType } from 'cockatiel';
+ *
+ * class NetworkError extends Error {}
+ *
+ * const retryPolicy = retry(
+ *   handleType(NetworkError, err => err.message.includes('timeout')),
+ *   { maxAttempts: 3 }
+ * );
+ * ```
+ * @see {@link Policy.orType} for usage.
  */
 export function handleType<T>(cls: Constructor<T>, predicate?: (error: T) => boolean) {
   return new Policy({ errorFilter: typeFilter(cls, predicate), resultFilter: never });
@@ -256,6 +277,23 @@ export function handleWhenResult(predicate: (error: unknown) => boolean) {
 
 /**
  * Creates a bulkhead--a policy that limits the number of concurrent calls.
+ * @param limit - Maximum number of concurrent executions
+ * @param queue - Maximum number of queued calls (default: 0)
+ * @example
+ * ```ts
+ * import { bulkhead } from 'cockatiel';
+ *
+ * // Allow max 5 concurrent database connections, with 10 queued
+ * const dbBulkhead = bulkhead(5, 10);
+ *
+ * try {
+ *   const result = await dbBulkhead.execute(() => queryDatabase());
+ * } catch (e) {
+ *   if (e instanceof BulkheadRejectedError) {
+ *     console.log('Too many concurrent requests');
+ *   }
+ * }
+ * ```
  */
 export function bulkhead(limit: number, queue: number = 0) {
   return new BulkheadPolicy(limit, queue);
@@ -310,6 +348,19 @@ export function usePolicy(policy: IPolicy<IDefaultPolicyContext, never>) {
  * throw. In aggressive timeouts, we'll immediately throw a
  * {@link TaskCancelledError} when the timeout is reached, in addition to
  * marking the passed token as failed.
+ * @example
+ * ```ts
+ * import { timeout, TimeoutStrategy } from 'cockatiel';
+ *
+ * // Cooperative timeout - waits for function to handle cancellation
+ * const cooperativeTimeout = timeout(5000, TimeoutStrategy.Cooperative);
+ * await cooperativeTimeout.execute(({ signal }) =>
+ *   fetch('/api/data', { signal })
+ * );
+ *
+ * // Aggressive timeout - immediately throws when timeout reached
+ * const aggressiveTimeout = timeout(5000, TimeoutStrategy.Aggressive);
+ * ```
  */
 export function timeout(
   duration: number,
@@ -403,12 +454,23 @@ export function wrap<C extends IDefaultPolicyContext, A>(
  *  - {@link IterableBackoff}
  *  - {@link DelegateBackoff} (advanced)
  *
- * For example:
+ * @example
+ * ```ts
+ * import { handleAll, retry, ExponentialBackoff } from 'cockatiel';
  *
- * ```
- * import { handleAll, retry } from 'cockatiel';
+ * // Retry with exponential backoff
+ * const retryPolicy = retry(handleAll, {
+ *   maxAttempts: 5,
+ *   backoff: new ExponentialBackoff()
+ * });
  *
- * const policy = retry(handleAll, { backoff: new ExponentialBackoff() });
+ * // Retry with constant backoff
+ * const constantRetry = retry(handleAll, {
+ *   maxAttempts: 3,
+ *   backoff: new ConstantBackoff(1000) // 1 second between attempts
+ * });
+ *
+ * const result = await retryPolicy.execute(() => fetchData());
  * ```
  *
  * You can optionally pass in the `attempts` to limit the maximum number of
@@ -432,23 +494,41 @@ export function retry(
  * your circuit breaker between executions of whatever function you're
  * wrapping for it to function!
  *
+ * @param policy - The policy to apply circuit breaking to
+ * @param opts - Circuit breaker options
+ * @example
  * ```ts
- * import { SamplingBreaker, Policy } from 'cockatiel';
+ * import { circuitBreaker, handleAll, SamplingBreaker, ConsecutiveBreaker } from 'cockatiel';
  *
  * // Break if more than 20% of requests fail in a 30 second time window:
- * const breaker = Policy
- *  .handleAll()
- *  .circuitBreaker(10_000, new SamplingBreaker(0.2, 30 * 1000));
+ * const samplingBreaker = circuitBreaker(handleAll, {
+ *   halfOpenAfter: 10_000,
+ *   breaker: new SamplingBreaker({ threshold: 0.2, duration: 30_000 })
+ * });
  *
- * export function handleRequest() {
- *   return breaker.execute(() => getInfoFromDatabase());
+ * // Break after 5 consecutive failures:
+ * const consecutiveBreaker = circuitBreaker(handleAll, {
+ *   halfOpenAfter: 10_000,
+ *   breaker: new ConsecutiveBreaker(5)
+ * });
+ *
+ * // Use with exponential backoff for half-open attempts
+ * const backoffBreaker = circuitBreaker(handleAll, {
+ *   halfOpenAfter: new ExponentialBackoff(),
+ *   breaker: new ConsecutiveBreaker(3)
+ * });
+ *
+ * export async function handleRequest() {
+ *   try {
+ *     return await samplingBreaker.execute(() => getInfoFromDatabase());
+ *   } catch (e) {
+ *     if (e instanceof BrokenCircuitError) {
+ *       return { error: 'Service temporarily unavailable' };
+ *     }
+ *     throw e;
+ *   }
  * }
  * ```
- *
- * @param halfOpenAfter Time after failures to try to open the circuit
- * breaker again.
- * @param breaker The circuit breaker to use. This package exports
- * ConsecutiveBreaker and SamplingBreakers for you to use.
  */
 export function circuitBreaker(policy: Policy, opts: ICircuitBreakerOptions) {
   return new CircuitBreakerPolicy(
@@ -460,20 +540,37 @@ export function circuitBreaker(policy: Policy, opts: ICircuitBreakerOptions) {
 /**
  * Falls back to the given value in the event of an error.
  *
+ * @param policy - The policy that determines which errors trigger fallback
+ * @param valueOrFactory - Value to fall back to, or a function that creates the
+ * value to return (any may return a promise)
+ * @example
  * ```ts
- * import { Policy } from 'cockatiel';
+ * import { fallback, handleType } from 'cockatiel';
  *
- * const fallback = Policy
- *  .handleType(DatabaseError)
- *  .fallback(() => getStaleData());
+ * class DatabaseError extends Error {}
+ *
+ * // Static fallback value
+ * const staticFallback = fallback(handleType(DatabaseError), { cached: true });
+ *
+ * // Dynamic fallback value
+ * const dynamicFallback = fallback(
+ *   handleType(DatabaseError),
+ *   () => getStaleDataFromCache()
+ * );
+ *
+ * // Async fallback
+ * const asyncFallback = fallback(
+ *   handleType(DatabaseError),
+ *   async () => {
+ *     await logError('Database unavailable');
+ *     return { error: 'Service degraded' };
+ *   }
+ * );
  *
  * export function handleRequest() {
- *   return fallback.execute(() => getInfoFromDatabase());
+ *   return dynamicFallback.execute(() => getInfoFromDatabase());
  * }
  * ```
- *
- * @param toValue Value to fall back to, or a function that creates the
- * value to return (any may return a promise)
  */
 export function fallback<R>(policy: Policy, valueOrFactory: (() => Promise<R> | R) | R) {
   return new FallbackPolicy(

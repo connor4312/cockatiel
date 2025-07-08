@@ -1,0 +1,144 @@
+name: Benchmark PR
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+    
+    - name: Benchmark base branch
+      run: |
+        git checkout ${{ github.event.pull_request.base.sha }}
+        npm ci
+        npm run compile || true
+        node --expose-gc src/simple-benchmark.js > base-benchmark.txt || echo "No benchmark available" > base-benchmark.txt
+    
+    - name: Benchmark PR branch
+      run: |
+        git checkout ${{ github.event.pull_request.head.sha }}
+        npm ci
+        npm run compile
+        node --expose-gc src/simple-benchmark.js > pr-benchmark.txt
+    
+    - name: Generate comparison report
+      id: benchmark
+      run: |
+        cat > compare.js << 'EOF'
+        const fs = require('fs');
+        
+        function parseBenchmark(content) {
+          const results = {};
+          const lines = content.split('\n');
+          
+          for (const line of lines) {
+            const match = line.match(/^(.+?):\s*([\d.]+)\s*ns\/op/);
+            if (match) {
+              results[match[1].trim()] = parseFloat(match[2]);
+            }
+          }
+          
+          return results;
+        }
+        
+        function formatChange(before, after) {
+          if (!before) return '🆕 New';
+          const change = ((after - before) / before) * 100;
+          const emoji = change > 5 ? '🔴' : change < -5 ? '🟢' : '🟡';
+          const sign = change > 0 ? '+' : '';
+          return `${emoji} ${sign}${change.toFixed(1)}%`;
+        }
+        
+        const baseBench = fs.readFileSync('base-benchmark.txt', 'utf8');
+        const prBench = fs.readFileSync('pr-benchmark.txt', 'utf8');
+        
+        const baseResults = parseBenchmark(baseBench);
+        const prResults = parseBenchmark(prBench);
+        
+        let report = '## 📊 Benchmark Results\n\n';
+        report += '| Benchmark | Base | PR | Change |\n';
+        report += '|-----------|------|----|---------|\n';
+        
+        const benchmarks = new Set([...Object.keys(baseResults), ...Object.keys(prResults)]);
+        
+        for (const bench of benchmarks) {
+          const base = baseResults[bench];
+          const pr = prResults[bench];
+          
+          if (pr !== undefined) {
+            const baseStr = base ? `${base.toFixed(2)} ns/op` : 'N/A';
+            const prStr = `${pr.toFixed(2)} ns/op`;
+            const change = formatChange(base, pr);
+            
+            report += `| ${bench} | ${baseStr} | ${prStr} | ${change} |\n`;
+          }
+        }
+        
+        report += '\n';
+        report += '### Legend\n';
+        report += '- 🟢 Performance improved (>5% faster)\n';
+        report += '- 🟡 No significant change (±5%)\n';
+        report += '- 🔴 Performance degraded (>5% slower)\n';
+        report += '- 🆕 New benchmark\n';
+        
+        fs.writeFileSync('benchmark-report.md', report);
+        console.log(report);
+        EOF
+        
+        node compare.js
+        
+        # Set output for next step
+        echo "report<<EOF" >> $GITHUB_OUTPUT
+        cat benchmark-report.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Comment on PR
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const report = `${{ steps.benchmark.outputs.report }}`;
+          
+          // Find previous benchmark comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number
+          });
+          
+          const benchmarkComment = comments.find(c => 
+            c.user.type === 'Bot' && c.body.includes('📊 Benchmark Results')
+          );
+          
+          if (benchmarkComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: benchmarkComment.id,
+              body: report
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: report
+            });
+          }

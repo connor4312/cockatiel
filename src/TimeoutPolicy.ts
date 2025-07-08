@@ -32,7 +32,7 @@ export interface ITimeoutOptions {
 }
 
 export class TimeoutPolicy implements IPolicy<ICancellationContext> {
-  declare readonly _altReturn: never;
+  readonly _altReturn!: never;
 
   private readonly timeoutEmitter = new EventEmitter<void>();
 

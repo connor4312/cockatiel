@@ -1,12 +1,22 @@
 # Cockatiel
 
-[![Actions Status](https://github.com/connor4312/cockatiel/workflows/Run%20Tests/badge.svg)](https://github.com/connor4312/cockatiel/actions)
-[![npm bundle size](https://img.shields.io/bundlephobia/minzip/cockatiel)](https://bundlephobia.com/result?p=cockatiel@0.1.0)
+[![Actions Status](https://github.com/connor4312/cockatiel/workflows/CI/badge.svg)](https://github.com/connor4312/cockatiel/actions)
+[![npm bundle size](https://img.shields.io/bundlephobia/minzip/cockatiel)](https://bundlephobia.com/result?p=cockatiel)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-success)
+![Node.js 18+](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
 
-Cockatiel is resilience and transient-fault-handling library that allows developers to express policies such as Retry, Circuit Breaker, Timeout, Bulkhead Isolation, and Fallback. .NET has [Polly](https://github.com/App-vNext/Polly), a wonderful one-stop shop for all your fault handling needs--I missed having such a library for my JavaScript projects, and grew tired of copy-pasting retry logic between my projects. Hence, this module!
+Cockatiel is resilience and transient-fault-handling library that allows developers to express policies such as Retry, Circuit Breaker, Timeout, Bulkhead Isolation, Rate Limiting, and Fallback. .NET has [Polly](https://github.com/App-vNext/Polly), a wonderful one-stop shop for all your fault handling needs--I missed having such a library for my JavaScript projects, and grew tired of copy-pasting retry logic between my projects. Hence, this module!
 
-    npm install --save cockatiel
+## Requirements
+
+- Node.js 18 or higher
+- TypeScript 4.7+ (if using TypeScript)
+
+## Installation
+
+```
+npm install --save cockatiel
+```
 
 Then go forth with confidence:
 
@@ -100,10 +110,21 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`bulkhead.onFailure(callback)`](#bulkheadonfailurecallback)
   - [`bulkhead.executionSlots`](#bulkheadexecutionslots)
   - [`bulkhead.queueSlots`](#bulkheadqueueslots)
+- [`rateLimiter(options)`](#ratelimiteroptions)
+  - [Configuration Options](#configuration-options)
+  - [`rateLimiter.execute(fn[, signal])`](#ratelimiterexecutefn-signal)
+  - [`rateLimiter.getState()`](#ratelimitergetstate)
+  - [`rateLimiter.reset()`](#ratelimiterreset)
+  - [`rateLimiter.onReject(callback)`](#ratelimiteronrejectcallback)
+  - [`rateLimiter.onSuccess(callback)`](#ratelimiteronsuccesscallback)
+  - [`rateLimiter.onFailure(callback)`](#ratelimiteronfailurecallback)
 - [`fallback(policy, valueOrFactory)`](#fallbackpolicy-valueorfactory)
   - [`fallback.execute(fn[, signal])`](#fallbackexecutefn-signal)
   - [`fallback.onSuccess(callback)`](#fallbackonsuccesscallback)
   - [`fallback.onFailure(callback)`](#fallbackonfailurecallback)
+- [Development](#development)
+  - [Running Benchmarks](#running-benchmarks)
+  - [CI/CD Pipeline](#cicd-pipeline)
 - [See Also](#see-also)
 
 ## `IPolicy` (the shape of a policy)
@@ -321,7 +342,6 @@ To use `retry()`, first pass in the [Policy](#Policy) to use, and then the optio
 
 - `maxAttempts`: the number of attempts to make before giving up
 - `backoff`: a generator that tells Cockatiel how long to wait between attempts. A number of backoff implementations are provided out of the box:
-
   - [ConstantBackoff](#constantbackoff)
   - [IterableBackoff](#iterablebackoff)
   - [ExponentialBackoff](#exponentialbackoff)
@@ -977,6 +997,121 @@ Returns the number of execution slots left in the bulkhead. If either this or `b
 
 Returns the number of queue slots left in the bulkhead. If either this or `bulkhead.executionSlots` is greater than zero, the `execute()` will not throw a `BulkheadRejectedError`.
 
+## `rateLimiter(options)`
+
+A rate limiter allows you to control the rate of executions using a token bucket algorithm. Each execution consumes a token, and tokens are refilled over time up to a maximum bucket size.
+
+```js
+import { rateLimiter, RateLimitExceededError } from 'cockatiel';
+
+// Allow 10 requests per second
+const limiter = rateLimiter({
+  bucketSize: 10,
+  interval: 1000,
+});
+
+// With queueing enabled
+const queuedLimiter = rateLimiter({
+  bucketSize: 10,
+  interval: 1000,
+  queueEnabled: true,
+  maxQueueSize: 50,
+});
+
+export async function handleRequest() {
+  try {
+    return await limiter.execute(() => callExternalAPI());
+  } catch (e) {
+    if (e instanceof RateLimitExceededError) {
+      return `rate limit exceeded, retry after ${e.retryAfter}ms`;
+    } else {
+      throw e;
+    }
+  }
+}
+```
+
+### Configuration Options
+
+- `bucketSize`: Maximum number of executions allowed within the interval
+- `interval`: Time window in milliseconds for the rate limit
+- `initialTokens`: Initial number of tokens available (defaults to bucketSize)
+- `queueEnabled`: Whether to queue executions when rate limit is exceeded (default: false)
+- `maxQueueSize`: Maximum number of queued executions when queueEnabled is true (default: Infinity)
+
+### `rateLimiter.execute(fn[, signal])`
+
+Executes the function if tokens are available. If not:
+
+- When `queueEnabled` is false: throws a `RateLimitExceededError` immediately
+- When `queueEnabled` is true: queues the execution until tokens become available
+
+The `RateLimitExceededError` includes a `retryAfter` property indicating when a token will next be available.
+
+Like all `Policy.execute` methods, any propagated `{ signal: AbortSignal }` will be given as the first argument to `fn`.
+
+```js
+const result = await limiter.execute(() => getData());
+```
+
+### `rateLimiter.getState()`
+
+Returns the current state of the rate limiter:
+
+```js
+const state = limiter.getState();
+console.log(`Available tokens: ${state.availableTokens}`);
+console.log(`Queue size: ${state.queueSize}`);
+console.log(`Bucket size: ${state.bucketSize}`);
+```
+
+### `rateLimiter.reset()`
+
+Resets the rate limiter to its initial state, clearing any queued executions and restoring the initial token count.
+
+```js
+limiter.reset();
+```
+
+### `rateLimiter.onReject(callback)`
+
+An [event emitter](#events) that fires when a request is rejected due to rate limiting. Returns a disposable instance.
+
+```js
+const listener = limiter.onReject(({ queueSize }) => {
+  console.log(`rate limit exceeded, queue size: ${queueSize}`);
+});
+
+listener.dispose();
+```
+
+### `rateLimiter.onSuccess(callback)`
+
+An [event emitter](#events) that fires whenever a function is successfully called. It's invoked with an object containing the duration in milliseconds to nanosecond precision.
+
+```js
+const listener = limiter.onSuccess(({ duration }) => {
+  console.log(`rate limited call ran in ${duration}ms`);
+});
+
+// later:
+listener.dispose();
+```
+
+### `rateLimiter.onFailure(callback)`
+
+An [event emitter](#events) that fires whenever a function throw an error or returns an errorful result. It's invoked with the duration of the call, the reason for the failure, and an boolean indicating whether the error is handled by the policy.
+
+```js
+const listener = limiter.onFailure(({ duration, handled, reason }) => {
+  console.log(`rate limited call ran in ${duration}ms and failed with`, reason);
+  console.log(handled ? 'error was handled' : 'error was not handled');
+});
+
+// later:
+listener.dispose();
+```
+
 ## `fallback(policy, valueOrFactory)`
 
 Creates a policy that returns the `valueOrFactory` if an executed function fails. As the name suggests, `valueOrFactory` either be a value, or a function we'll call when a failure happens to create a value.
@@ -1029,6 +1164,54 @@ const listener = fallback.onFailure(({ duration, handled, reason }) => {
 // later:
 listener.dispose();
 ```
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Build the project
+npm run compile
+
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run benchmarks
+npm run bench
+
+# Format code
+npm run fmt
+```
+
+### Running Benchmarks
+
+To compare performance across versions:
+
+```bash
+# Simple benchmark
+npm run bench:simple
+
+# Full benchmark suite (requires Vitest)
+npm run bench
+
+# Compare with baseline
+npm run bench:compare
+```
+
+### CI/CD Pipeline
+
+The project uses GitHub Actions with the following stages:
+
+1. **Lint** - Checks code formatting and markdown
+2. **Build** - Compiles TypeScript to both CommonJS and ESM
+3. **Test** - Runs tests on multiple Node.js versions and operating systems
+4. **Benchmark** - Runs performance benchmarks and compares with base branch (PRs only)
+
+Pull requests automatically get benchmark comparison comments showing performance impacts.
 
 ## See Also
 

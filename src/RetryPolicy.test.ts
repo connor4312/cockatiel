@@ -1,11 +1,8 @@
-import { expect, use } from 'chai';
+import { expect } from 'chai';
 import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
 import { ExponentialBackoff, IterableBackoff, noJitterGenerator } from './backoff/Backoff';
 import { runInChild } from './common/util.test';
 import { handleAll, handleType, handleWhenResult, retry } from './Policy';
-
-use(require('sinon-chai'));
-use(require('chai-as-promised'));
 
 class MyErrorA extends Error {
   constructor() {

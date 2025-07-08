@@ -14,7 +14,7 @@ interface IQueueItem<T> {
 }
 
 export class BulkheadPolicy implements IPolicy {
-  public declare readonly _altReturn: never;
+  public readonly _altReturn!: never;
 
   private active = 0;
   private readonly queue: Array<IQueueItem<unknown>> = [];

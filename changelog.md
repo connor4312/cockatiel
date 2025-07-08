@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+### Breaking Changes
+
+- **BREAKING:** Minimum Node.js version is now 18 (previously 16)
+
+### Features
+
+- **feat:** Add native ESM support with proper exports field
+- **feat:** Add comprehensive JSDoc examples to all main functions
+- **feat:** Add benchmark suite for performance testing
+- **feat:** Improved TypeScript configuration with ES2022 target
+- **feat:** Add new Rate Limiter policy with token bucket algorithm for controlling execution rates
+
+### Developer Experience
+
+- **dx:** Replace Mocha with Vitest for faster test execution
+- **dx:** Update all development dependencies to latest versions
+- **dx:** Add GitHub Actions improvements for better CI/CD
+- **dx:** Add automated benchmark comparisons in pull requests
+- **dx:** Replace `declare` with proper type assertions for better type safety
+- **dx:** Add migration guide from v2 to v3
+
+### Performance
+
+- **perf:** Bulkhead policy performance improved by ~15%
+- **perf:** Maintained or improved performance across all policies (see benchmarks)
+
+### Documentation
+
+- **docs:** Add requirements section to README
+- **docs:** Add development guide with benchmark instructions
+- **docs:** Update badges to reflect current project state
+
 ## 3.2.1
 
 - **fix:** restore breaker state when circuit state is restored
@@ -54,7 +88,6 @@
   ```
 
   The full changes are:
-
   - `Policy.retry()` -> `retry(policy, options)`
   - `Policy.circuitBreaker(halfOpenAfter, breaker)` -> `retry(policy, { halfOpenAfter: number, breaker: IBreaker })`
   - `Policy.fallback(valueOrFactory)` -> `fallback(policy, valueOrFactory)`
@@ -72,7 +105,6 @@
   We simplified it to be a simple options object given in `policy`, where the max attempts is also given. For the backoff itself, you pass the underlying backoff generator (or a custom one)
 
   Instead of:
-
   - `Policy.retry().attempts(2).delay(5)`, you can write `retry(policy, { maxAttempts: 2, backoff: new ConstantBackoff(5) })`
   - `Policy.retry().delay([100, 200, 300])`, you can write `retry(policy, { maxAttempts: 3, backoff: new IterableBackoff(100, 200, 300) })`
   - `Policy.retry().exponential(opts)`, you can write `retry(policy, { backoff: new ExponentialBackoff(opts) })`
@@ -91,7 +123,6 @@
 - **breaking:** **refactor:** move to using native `AbortSignal` over `CancellationToken`.
 
   Previously, this package provided its own implementation of cancellation via the `CancellationTokenSource` and `CancellationToken`. Now, we use the native `AbortSignal` which is available in browsers and Node.js since Node 16. To migrate, instead of...
-
   - accessing `context.cancellationToken`, access `context.signal` which is an `AbortSignal`,
   - pass in an `AbortSignal` as the second argument to `Policy.execute`, instead of a `CancellationToken`,
   - use `signal.aborted` instead of `signal.isCancellationRequested` to check for cancellation,

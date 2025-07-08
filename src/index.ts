@@ -7,5 +7,6 @@ export * from './errors/Errors';
 export * from './FallbackPolicy';
 export * from './NoopPolicy';
 export * from './Policy';
+export * from './RateLimiterPolicy';
 export * from './RetryPolicy';
 export * from './TimeoutPolicy';

@@ -80,3 +80,22 @@ typings/
 # End of https://www.gitignore.io/api/node
 
 /dist
+
+# Benchmark results
+benchmark-results/
+*-benchmark.txt
+memory-*.txt
+
+# Vitest
+vitest.config.ts.timestamp-*
+
+# Editor
+.idea/
+
+# Compiled files in root
+/vitest.config.js
+/vitest.config.js.map
+/vitest.config.d.ts
+/vitest.setup.js
+/vitest.setup.js.map
+/vitest.setup.d.ts

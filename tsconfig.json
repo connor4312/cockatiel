@@ -12,15 +12,21 @@
     "moduleResolution": "node",
     "newLine": "LF",
     "module": "commonjs",
-    "target": "ES2021",
-    "lib": ["ES2021"],
+    "target": "ES2022",
+    "lib": ["ES2022"],
     "outDir": "dist",
+    "rootDir": "src",
+    "useDefineForClassFields": false,
+    "skipLibCheck": true,
     "types": [
-      "node",
-      "mocha",
-      "chai-subset",
-      "sinon-chai",
-      "chai-as-promised"
+      "node"
     ]
-  }
+  },
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.bench.ts",
+    "src/simple-benchmark.js",
+    "vitest.config.ts",
+    "vitest.setup.ts"
+  ]
 }

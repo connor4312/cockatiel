@@ -46,7 +46,7 @@ export interface IRetryPolicyConfig {
 }
 
 export class RetryPolicy implements IPolicy<IRetryContext> {
-  declare readonly _altReturn: never;
+  readonly _altReturn!: never;
 
   private readonly onGiveUpEmitter = new EventEmitter<FailureReason<unknown>>();
   private readonly onRetryEmitter = new EventEmitter<

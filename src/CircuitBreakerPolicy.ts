@@ -86,7 +86,7 @@ interface ISerializedState {
 }
 
 export class CircuitBreakerPolicy implements IPolicy {
-  declare readonly _altReturn: never;
+  readonly _altReturn!: never;
 
   private readonly breakEmitter = new EventEmitter<FailureReason<unknown> | { isolated: true }>();
   private readonly resetEmitter = new EventEmitter<void>();
