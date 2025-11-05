@@ -46,7 +46,7 @@ export class CountBreaker implements IBreaker {
    */
   public get state(): unknown {
     return {
-      samples: this.samples,
+      samples: [...this.samples],
       currentSample: this.currentSample,
       failures: this.failures,
       successes: this.successes,
@@ -57,7 +57,9 @@ export class CountBreaker implements IBreaker {
    * @inheritdoc
    */
   public set state(value: unknown) {
-    Object.assign(this, value);
+    const { samples, ...rest } = value as ICountBreakerState;
+    Object.assign(this, rest);
+    this.samples = [...samples];
   }
 
   /**
