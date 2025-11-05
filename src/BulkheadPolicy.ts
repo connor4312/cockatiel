@@ -67,10 +67,6 @@ export class BulkheadPolicy implements IPolicy {
     fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
     signal = neverAbortedSignal,
   ): Promise<T> {
-    if (signal.aborted) {
-      throw new TaskCancelledError();
-    }
-
     if (this.active < this.capacity) {
       this.active++;
       try {
@@ -94,6 +90,12 @@ export class BulkheadPolicy implements IPolicy {
   private dequeue() {
     const item = this.queue.shift();
     if (!item) {
+      return;
+    }
+
+    if (item.signal.aborted) {
+      item.reject(new TaskCancelledError());
+      this.dequeue();
       return;
     }
 
