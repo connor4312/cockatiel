@@ -223,7 +223,7 @@ import { wrap } from 'cockatiel';
 
 wrap(retry, breaker, timeout).execute(context => {
   console.log(context);
-  // => { attempts: 1, cancellation: }
+  // => { attempt: 1, signal: AbortSignal }
 });
 ```
 
