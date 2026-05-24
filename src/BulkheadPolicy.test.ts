@@ -157,4 +157,25 @@ describe('Bulkhead', () => {
 
     await Promise.all(todo);
   });
+
+  it('should process next queued item when previous item was aborted', async () => {
+    const b = bulkhead(1, 10);
+    const defer1 = defer<number>();
+    const abortController = new AbortController();
+
+    const promise1 = b.execute(() => defer1.promise);
+
+    const promise2 = b.execute(() => 2, abortController.signal);
+    const promise3 = b.execute(() => 3);
+
+    abortController.abort();
+    defer1.resolve(1);
+    await promise1;
+
+    await expect(promise2).to.be.rejectedWith(TaskCancelledError);
+    expect(await promise3).to.equal(3);
+
+    expect(b.executionSlots).to.equal(1);
+    expect(b.queueSlots).to.equal(10);
+  });
 });

@@ -56,7 +56,7 @@ export class BulkheadPolicy implements IPolicy {
   constructor(
     private readonly capacity: number,
     private readonly queueCapacity: number,
-  ) {}
+  ) { }
 
   /**
    * Executes the given function.
@@ -97,9 +97,14 @@ export class BulkheadPolicy implements IPolicy {
       return;
     }
 
-    Promise.resolve()
-      .then(() => this.execute(item.fn, item.signal))
-      .then(item.resolve)
-      .catch(item.reject);
+    Promise.resolve().then(() => {
+      if (item.signal.aborted) {
+        item.reject(new TaskCancelledError());
+        this.dequeue();
+        return;
+      }
+
+      this.execute(item.fn, item.signal).then(item.resolve, item.reject);
+    });
   }
 }
