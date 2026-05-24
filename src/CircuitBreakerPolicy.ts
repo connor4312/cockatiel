@@ -244,7 +244,7 @@ export class CircuitBreakerPolicy implements IPolicy {
           throw new TaskCancelledError();
         }
 
-        return this.execute(fn);
+        return this.execute(fn, signal);
 
       case CircuitState.Open:
         if (Date.now() - state.openedAt < state.backoff.duration) {

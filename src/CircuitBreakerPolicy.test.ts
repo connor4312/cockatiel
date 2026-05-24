@@ -268,6 +268,31 @@ describe('CircuitBreakerPolicy', () => {
     expect(onReset).calledOnce;
   });
 
+  it('respects signal cancellation when execute() is called during HalfOpen state', async () => {
+    await openBreaker();
+
+    clock.tick(1000);
+
+    // half open test:
+    p.execute(stub().resolves(42));
+
+    // Queue an execution with a custom signal while circuit is HalfOpen
+    const controller = new AbortController();
+    let signalWasAborted = false;
+
+    const promise = p.execute(({ signal }) => {
+      // Abort the signal and check if it's detected
+      controller.abort();
+      signalWasAborted = signal.aborted;
+      return 'result';
+    }, controller.signal);
+
+    await promise;
+
+    // The signal should have been detected as aborted
+    expect(signalWasAborted).to.be.true;
+  });
+
   describe('state restoration', () => {
     let args: { duration: number; attempt: number }[] = [];
     class MyBreaker implements IBackoffFactory<IHalfOpenAfterBackoffContext> {
