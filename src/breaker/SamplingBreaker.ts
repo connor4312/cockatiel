@@ -49,7 +49,7 @@ export class SamplingBreaker implements IBreaker {
    */
   public get state(): unknown {
     return {
-      windows: this.windows,
+      windows: this.windows.map(w => ({ ...w })),
       currentWindow: this.currentWindow,
       currentFailures: this.currentFailures,
       currentSuccesses: this.currentSuccesses,
@@ -60,7 +60,9 @@ export class SamplingBreaker implements IBreaker {
    * @inheritdoc
    */
   public set state(value: unknown) {
-    Object.assign(this, value);
+    const { windows, ...rest } = value as ISamplingBreakerState;
+    Object.assign(this, rest);
+    this.windows = windows.map(w => ({ ...w }));
   }
 
   /**
