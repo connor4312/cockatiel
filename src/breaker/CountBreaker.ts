@@ -57,9 +57,7 @@ export class CountBreaker implements IBreaker {
    * @inheritdoc
    */
   public set state(value: unknown) {
-    const { samples, ...rest } = value as ICountBreakerState;
-    Object.assign(this, rest);
-    this.samples = [...samples];
+    Object.assign(this, structuredClone(value));
   }
 
   /**

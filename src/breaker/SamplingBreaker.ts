@@ -60,9 +60,7 @@ export class SamplingBreaker implements IBreaker {
    * @inheritdoc
    */
   public set state(value: unknown) {
-    const { windows, ...rest } = value as ISamplingBreakerState;
-    Object.assign(this, rest);
-    this.windows = windows.map(w => ({ ...w }));
+    Object.assign(this, structuredClone(value));
   }
 
   /**
