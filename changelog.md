@@ -2,7 +2,17 @@
 
 ## 4.0.0 (TBA)
 
-- **breaking:** updated minimum Node version to 22, and cocktiel is now built as a ES module
+- **breaking:** updated minimum Node version to 22, and cockatiel is now built as an ES module
+- **breaking:** errors surfaced from policies are no longer cast via `as Error`; callback and result types now reflect `unknown` for thrown values ([#97](https://github.com/connor4312/cockatiel/issues/97))
+- **feat:** add `halfOpenSampling` option to the circuit breaker ([#73](https://github.com/connor4312/cockatiel/issues/73))
+- **fix:** bulkhead queue starvation when queued executions were aborted ([#112](https://github.com/connor4312/cockatiel/issues/112))
+- **fix:** propagate the abort signal into the half-open state of the circuit breaker ([#112](https://github.com/connor4312/cockatiel/issues/112))
+- **fix:** deep copy state in `CountBreaker` and `SamplingBreaker` getters/setters via `structuredClone` ([#113](https://github.com/connor4312/cockatiel/issues/113))
+- **fix:** correct type predicates for errors ([#103](https://github.com/connor4312/cockatiel/issues/103))
+- **fix:** propagate abort reason in derived signals ([#101](https://github.com/connor4312/cockatiel/issues/101))
+- **docs:** clarify that `TaskCancelledError` is not thrown on cooperative timeouts ([#98](https://github.com/connor4312/cockatiel/issues/98))
+- **docs:** fix comment in wrapped policies example ([#118](https://github.com/connor4312/cockatiel/issues/118))
+- **chore:** update node types to support `AbortSignal` ([#116](https://github.com/connor4312/cockatiel/issues/116))
 
 ## 3.2.1
 
