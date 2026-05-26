@@ -1,6 +1,7 @@
 import { ConstantBackoff, IBackoff, IBackoffFactory } from './backoff/Backoff.js';
 import { IBreaker } from './breaker/Breaker.js';
 import { neverAbortedSignal } from './common/abort.js';
+import { defer } from './common/defer.js';
 import { EventEmitter } from './common/Event.js';
 import { ExecuteWrapper, returnOrThrow } from './common/Executor.js';
 import { BrokenCircuitError, HydratingCircuitError, TaskCancelledError } from './errors/Errors.js';
@@ -59,10 +60,33 @@ export interface ICircuitBreakerOptions {
   halfOpenAfter: number | IBackoffFactory<IHalfOpenAfterBackoffContext>;
 
   /**
+   * Controls how many calls are sampled while the circuit is half-open before
+   * deciding whether to close or reopen it. Defaults to a single call with no
+   * permitted failures, matching the traditional circuit breaker behavior.
+   */
+  halfOpenSampling?: IHalfOpenSamplingOptions;
+
+  /**
    * Initial state from a previous call to {@link CircuitBreakerPolicy.toJSON}.
    */
   initialState?: unknown;
 }
+
+export interface IHalfOpenSamplingOptions {
+  /**
+   * Number of calls to allow through while half-open before closing the circuit
+   * if the failure threshold is not exceeded.
+   */
+  calls: number;
+
+  /**
+   * Percentage (from 0 to 1) of half-open calls that may fail before the
+   * circuit is reopened.
+   */
+  threshold: number;
+}
+
+type Deferred<T> = ReturnType<typeof defer<T>>;
 
 type InnerState =
   | { value: CircuitState.Closed }
@@ -75,9 +99,12 @@ type InnerState =
     }
   | {
       value: CircuitState.HalfOpen;
-      test: Promise<any>;
       attemptNo: number;
       backoff: IBackoff<IHalfOpenAfterBackoffContext>;
+      decision: Deferred<void>;
+      inFlight: number;
+      successes: number;
+      failures: number;
     };
 
 interface ISerializedState {
@@ -93,6 +120,7 @@ export class CircuitBreakerPolicy implements IPolicy {
   private readonly halfOpenEmitter = new EventEmitter<void>();
   private readonly stateChangeEmitter = new EventEmitter<CircuitState>();
   private readonly halfOpenAfterBackoffFactory: IBackoffFactory<IHalfOpenAfterBackoffContext>;
+  private readonly halfOpenSampling: IHalfOpenSamplingOptions;
   private innerLastFailure?: FailureReason<unknown>;
   private innerState: InnerState = { value: CircuitState.Closed };
 
@@ -153,6 +181,7 @@ export class CircuitBreakerPolicy implements IPolicy {
       typeof options.halfOpenAfter === 'number'
         ? new ConstantBackoff(options.halfOpenAfter)
         : options.halfOpenAfter;
+    this.halfOpenSampling = this.createHalfOpenSamplingOptions(options.halfOpenSampling);
 
     if (options.initialState) {
       const initialState = options.initialState as ISerializedState;
@@ -187,6 +216,10 @@ export class CircuitBreakerPolicy implements IPolicy {
    */
   public isolate() {
     if (this.innerState.value !== CircuitState.Isolated) {
+      if (this.innerState.value === CircuitState.HalfOpen) {
+        this.innerState.decision.resolve();
+      }
+
       this.innerState = { value: CircuitState.Isolated, counters: 0 };
       this.breakEmitter.emit({ isolated: true });
       this.stateChangeEmitter.emit(CircuitState.Isolated);
@@ -239,26 +272,26 @@ export class CircuitBreakerPolicy implements IPolicy {
         return returnOrThrow(result);
 
       case CircuitState.HalfOpen:
-        await state.test.catch(() => undefined);
-        if (this.state === CircuitState.Closed && signal.aborted) {
-          throw new TaskCancelledError();
-        }
-
-        return this.execute(fn, signal);
+        return this.executeHalfOpen(fn, signal, state);
 
       case CircuitState.Open:
         if (Date.now() - state.openedAt < state.backoff.duration) {
           throw new BrokenCircuitError();
         }
-        const test = this.halfOpen(fn, signal);
-        this.innerState = {
+
+        const halfOpenState: InnerState = {
           value: CircuitState.HalfOpen,
-          test,
           backoff: state.backoff,
           attemptNo: state.attemptNo + 1,
+          decision: defer(),
+          inFlight: 0,
+          successes: 0,
+          failures: 0,
         };
+        this.innerState = halfOpenState;
+        this.halfOpenEmitter.emit();
         this.stateChangeEmitter.emit(CircuitState.HalfOpen);
-        return test;
+        return this.executeHalfOpen(fn, signal, halfOpenState);
 
       case CircuitState.Isolated:
         throw new IsolatedCircuitError();
@@ -266,6 +299,46 @@ export class CircuitBreakerPolicy implements IPolicy {
       default:
         throw new Error(`Unexpected circuit state ${state}`);
     }
+  }
+
+  private async executeHalfOpen<T>(
+    fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
+    signal: AbortSignal,
+    state: Extract<InnerState, { value: CircuitState.HalfOpen }>,
+  ): Promise<T> {
+    if (this.innerState !== state) {
+      return this.execute(fn, signal);
+    }
+
+    if (state.successes + state.failures + state.inFlight >= this.halfOpenSampling.calls) {
+      await state.decision.promise;
+      if (this.state === CircuitState.Closed && signal.aborted) {
+        throw new TaskCancelledError();
+      }
+
+      return this.execute(fn, signal);
+    }
+
+    state.inFlight++;
+
+    let result;
+    try {
+      result = await this.executor.invoke(fn, { signal });
+    } catch (err) {
+      // It's an error, but not one the circuit is meant to retry, so
+      // for our purposes it's a success. Task failed successfully!
+      this.recordHalfOpenSuccess(state);
+      throw err;
+    }
+
+    if ('success' in result) {
+      this.recordHalfOpenSuccess(state);
+    } else {
+      this.innerLastFailure = result;
+      this.recordHalfOpenFailure(state, result, signal);
+    }
+
+    return returnOrThrow(result);
   }
 
   /**
@@ -296,30 +369,43 @@ export class CircuitBreakerPolicy implements IPolicy {
     return { ownState, breakerState: this.options.breaker.state } satisfies ISerializedState;
   }
 
-  private async halfOpen<T>(
-    fn: (context: IDefaultPolicyContext) => PromiseLike<T> | T,
-    signal: AbortSignal,
-  ): Promise<T> {
-    this.halfOpenEmitter.emit();
-
-    try {
-      const result = await this.executor.invoke(fn, { signal });
-      if ('success' in result) {
-        this.options.breaker.success(CircuitState.HalfOpen);
-        this.close();
-      } else {
-        this.innerLastFailure = result;
-        this.options.breaker.failure(CircuitState.HalfOpen);
-        this.open(result, signal);
-      }
-
-      return returnOrThrow(result);
-    } catch (err) {
-      // It's an error, but not one the circuit is meant to retry, so
-      // for our purposes it's a success. Task failed successfully!
-      this.close();
-      throw err;
+  private recordHalfOpenSuccess(state: Extract<InnerState, { value: CircuitState.HalfOpen }>) {
+    if (this.innerState !== state) {
+      return;
     }
+
+    state.inFlight--;
+    state.successes++;
+    this.maybeCompleteHalfOpen(state);
+  }
+
+  private recordHalfOpenFailure(
+    state: Extract<InnerState, { value: CircuitState.HalfOpen }>,
+    reason: FailureReason<unknown>,
+    signal: AbortSignal,
+  ) {
+    if (this.innerState !== state) {
+      return;
+    }
+
+    state.inFlight--;
+    state.failures++;
+
+    if (state.failures > this.halfOpenSampling.threshold * this.halfOpenSampling.calls) {
+      this.options.breaker.failure(CircuitState.HalfOpen);
+      this.open(reason, signal);
+      return;
+    }
+
+    this.maybeCompleteHalfOpen(state);
+  }
+
+  private maybeCompleteHalfOpen(state: Extract<InnerState, { value: CircuitState.HalfOpen }>) {
+    if (state.successes + state.failures < this.halfOpenSampling.calls || state.inFlight) {
+      return;
+    }
+
+    this.close();
   }
 
   private open(reason: FailureReason<unknown>, signal: AbortSignal) {
@@ -327,6 +413,7 @@ export class CircuitBreakerPolicy implements IPolicy {
       return;
     }
 
+    const previousState = this.innerState;
     const attemptNo =
       this.innerState.value === CircuitState.HalfOpen ? this.innerState.attemptNo : 1;
     const context = { attempt: attemptNo, result: reason, signal };
@@ -336,15 +423,44 @@ export class CircuitBreakerPolicy implements IPolicy {
         : this.halfOpenAfterBackoffFactory.next(context);
 
     this.innerState = { value: CircuitState.Open, openedAt: Date.now(), backoff, attemptNo };
+    if (previousState.value === CircuitState.HalfOpen) {
+      previousState.decision.resolve();
+    }
+
     this.breakEmitter.emit(reason);
     this.stateChangeEmitter.emit(CircuitState.Open);
   }
 
   private close() {
-    if (this.state === CircuitState.HalfOpen) {
+    if (this.innerState.value === CircuitState.HalfOpen) {
+      const state = this.innerState;
+      this.options.breaker.success(CircuitState.HalfOpen);
       this.innerState = { value: CircuitState.Closed };
+      state.decision.resolve();
       this.resetEmitter.emit();
       this.stateChangeEmitter.emit(CircuitState.Closed);
     }
+  }
+
+  private createHalfOpenSamplingOptions(options?: IHalfOpenSamplingOptions) {
+    const halfOpenSampling = options ?? { calls: 1, threshold: 0 };
+
+    if (!Number.isSafeInteger(halfOpenSampling.calls) || halfOpenSampling.calls < 1) {
+      throw new RangeError(
+        `CircuitBreaker halfOpenSampling.calls should be a positive integer, got ${halfOpenSampling.calls}`,
+      );
+    }
+
+    if (
+      !Number.isFinite(halfOpenSampling.threshold) ||
+      halfOpenSampling.threshold < 0 ||
+      halfOpenSampling.threshold >= 1
+    ) {
+      throw new RangeError(
+        `CircuitBreaker halfOpenSampling.threshold should be between [0, 1), got ${halfOpenSampling.threshold}`,
+      );
+    }
+
+    return { calls: halfOpenSampling.calls, threshold: halfOpenSampling.threshold };
   }
 }

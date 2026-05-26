@@ -74,7 +74,7 @@ I recommend reading the [Polly wiki](https://github.com/App-vNext/Polly/wiki) fo
   - [`retry.onSuccess(callback)`](#retryonsuccesscallback)
   - [`retry.onFailure(callback)`](#retryonfailurecallback)
   - [`retry.onGiveUp(callback)`](#retryongiveupcallback)
-- [`circuitBreaker(policy, { halfOpenAfter, breaker[, initialState] })`](#circuitbreakerpolicy--halfopenafter-breaker-initialstate-)
+- [`circuitBreaker(policy, { halfOpenAfter, breaker[, halfOpenSampling, initialState] })`](#circuitbreakerpolicy--halfopenafter-breaker-halfopensampling-initialstate-)
   - [Breakers](#breakers)
     - [`ConsecutiveBreaker`](#consecutivebreaker)
     - [`CountBreaker`](#countbreaker)
@@ -383,7 +383,7 @@ const foreverBackoff = new ConstantBackoff(50);
 
 #### `ExponentialBackoff`
 
-> Tip: exponential backoffs and [circuit breakers](#circuitbreakerpolicy--halfopenafter-breaker-initialstate-) are great friends!
+> Tip: exponential backoffs and [circuit breakers](#circuitbreakerpolicy--halfopenafter-breaker-halfopensampling-initialstate-) are great friends!
 
 The crowd favorite. By default, it uses a decorrelated jitter algorithm, which is a good default for most applications. Takes in an options object, which can have any of these properties:
 
@@ -568,7 +568,7 @@ const listener = retry.onGiveUp(reason => console.log('retrying a function call:
 listener.dispose();
 ```
 
-## `circuitBreaker(policy, { halfOpenAfter, breaker[, initialState] })`
+## `circuitBreaker(policy, { halfOpenAfter, breaker[, halfOpenSampling, initialState] })`
 
 Circuit breakers stop execution for a period of time after a failure threshold has been reached. This is very useful to allow faulting systems to recover without overloading them. See the [Polly docs](https://github.com/App-vNext/Polly/wiki/Circuit-Breaker#how-the-polly-circuitbreaker-works) for more detailed information around circuit breakers.
 
@@ -581,6 +581,8 @@ To create a breaker, you use a [Policy](#Policy) like you normally would, and ca
   You may also pass a backoff strategy instead of a constant number of milliseconds if you wish to increase the interval between consecutive failing half-open checks.
 
 - The `breaker` is the [breaker policy](#breakers) which controls when the circuit opens.
+
+- The `halfOpenSampling` option can be used to require several half-open calls before recovery. By default, one successful half-open call closes the circuit and one failed half-open call reopens it. Set `calls` to the number of trial calls to allow through, and `threshold` to the failure percentage that reopens the circuit if exceeded.
 
 - The `initialState` option can be passed if you're hydrating the breaker from state collectiond from previous execution using [breaker.toJSON()](#breakertojson).
 
@@ -606,6 +608,13 @@ const breaker = circuitBreaker(handleAll, {
 const breaker = circuitBreaker(handleAll, {
   halfOpenAfter: new ExponentialBackoff(),
   breaker: new ConsecutiveBreaker(5),
+});
+
+// After opening, allow 10 trial calls and close if at most 30% fail:
+const breaker = circuitBreaker(handleAll, {
+  halfOpenAfter: 10 * 1000,
+  breaker: new SamplingBreaker({ threshold: 0.2, duration: 30 * 1000 }),
+  halfOpenSampling: { calls: 10, threshold: 0.3 },
 });
 
 // Get info from the database, or return 'service unavailable' if it's down/recovering
@@ -810,7 +819,7 @@ const breaker = circuitBreaker(policy, {
 });
 ```
 
-Note that if the breaker is currently half open, the serialized state will record it in such a way that it's open when restored and will use the first call as the half-open test.
+Note that if the breaker is currently half open, the serialized state will record it in such a way that it's open when restored. The next calls after the `halfOpenAfter` duration will start a fresh half-open recovery sample.
 
 ## `timeout(duration, strategy)`
 

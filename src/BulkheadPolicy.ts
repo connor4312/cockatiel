@@ -56,7 +56,7 @@ export class BulkheadPolicy implements IPolicy {
   constructor(
     private readonly capacity: number,
     private readonly queueCapacity: number,
-  ) { }
+  ) {}
 
   /**
    * Executes the given function.

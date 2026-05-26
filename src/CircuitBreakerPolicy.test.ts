@@ -185,6 +185,126 @@ describe('CircuitBreakerPolicy', () => {
     await Promise.all(todo);
   });
 
+  it('samples multiple half-open calls before closing', async () => {
+    p = circuitBreaker(handleType(MyException), {
+      halfOpenAfter: 1000,
+      breaker: new ConsecutiveBreaker(2),
+      halfOpenSampling: { calls: 10, threshold: 0.3 },
+    });
+    p.onReset(onReset);
+    p.onHalfOpen(onHalfOpen);
+
+    await openBreaker();
+    clock.tick(1000);
+
+    for (let i = 0; i < 3; i++) {
+      await expect(p.execute(stub().throws(new MyException()))).to.be.rejectedWith(MyException);
+      expect(p.state).to.equal(CircuitState.HalfOpen);
+    }
+
+    for (let i = 0; i < 6; i++) {
+      await expect(p.execute(stub().resolves(42))).to.eventually.equal(42);
+      expect(p.state).to.equal(CircuitState.HalfOpen);
+    }
+
+    await expect(p.execute(stub().resolves(42))).to.eventually.equal(42);
+    expect(p.state).to.equal(CircuitState.Closed);
+    expect(onHalfOpen).calledOnce;
+    expect(onReset).calledOnce;
+  });
+
+  it('re-opens when the half-open sample exceeds the failure threshold', async () => {
+    p = circuitBreaker(handleType(MyException), {
+      halfOpenAfter: 1000,
+      breaker: new ConsecutiveBreaker(2),
+      halfOpenSampling: { calls: 10, threshold: 0.3 },
+    });
+    p.onHalfOpen(onHalfOpen);
+
+    await openBreaker();
+    clock.tick(1000);
+
+    for (let i = 0; i < 3; i++) {
+      await expect(p.execute(stub().throws(new MyException()))).to.be.rejectedWith(MyException);
+      expect(p.state).to.equal(CircuitState.HalfOpen);
+    }
+
+    await expect(p.execute(stub().throws(new MyException()))).to.be.rejectedWith(MyException);
+    expect(p.state).to.equal(CircuitState.Open);
+    expect(onHalfOpen).calledOnce;
+  });
+
+  it('queues calls once the half-open sample is full', async () => {
+    p = circuitBreaker(handleType(MyException), {
+      halfOpenAfter: 1000,
+      breaker: new ConsecutiveBreaker(2),
+      halfOpenSampling: { calls: 2, threshold: 0 },
+    });
+
+    await openBreaker();
+    clock.tick(1000);
+
+    const a = async () => {
+      await delay(10);
+      return 1;
+    };
+    const b = async () => {
+      await delay(10);
+      return 2;
+    };
+    const c = stub().resolves(3);
+
+    const todo = [
+      expect(p.execute(a)).to.eventually.equal(1),
+      expect(p.execute(b)).to.eventually.equal(2),
+      expect(p.execute(c)).to.eventually.equal(3),
+    ];
+
+    clock.tick(10);
+
+    await Promise.all(todo);
+    expect(c).calledOnce;
+    expect(p.state).to.equal(CircuitState.Closed);
+  });
+
+  it('validates half-open sampling options', () => {
+    expect(() =>
+      circuitBreaker(handleType(MyException), {
+        halfOpenAfter: 1000,
+        breaker: new ConsecutiveBreaker(2),
+        halfOpenSampling: { calls: 0, threshold: 0.3 },
+      }),
+    ).to.throw(RangeError);
+    expect(() =>
+      circuitBreaker(handleType(MyException), {
+        halfOpenAfter: 1000,
+        breaker: new ConsecutiveBreaker(2),
+        halfOpenSampling: { calls: 10, threshold: -0.1 },
+      }),
+    ).to.throw(RangeError);
+    expect(() =>
+      circuitBreaker(handleType(MyException), {
+        halfOpenAfter: 1000,
+        breaker: new ConsecutiveBreaker(2),
+        halfOpenSampling: { calls: 10, threshold: 1 },
+      }),
+    ).to.throw(RangeError);
+    expect(() =>
+      circuitBreaker(handleType(MyException), {
+        halfOpenAfter: 1000,
+        breaker: new ConsecutiveBreaker(2),
+        halfOpenSampling: { calls: 10, threshold: Number.NaN },
+      }),
+    ).to.throw(RangeError);
+    expect(() =>
+      circuitBreaker(handleType(MyException), {
+        halfOpenAfter: 1000,
+        breaker: new ConsecutiveBreaker(2),
+        halfOpenSampling: { calls: 10 } as any,
+      }),
+    ).to.throw(RangeError);
+  });
+
   it('stops deduped half-open tests if the circuit reopens', async () => {
     await openBreaker();
     clock.tick(1000);
