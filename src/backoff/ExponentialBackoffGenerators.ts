@@ -12,7 +12,7 @@ export type GeneratorFn<S> = (
  * Generator that creates a backoff with no jitter.
  */
 export const noJitterGenerator: GeneratorFn<number> = (attempts = 0, options) => [
-  Math.min(options.maxDelay, options.initialDelay * 2 ** attempts),
+  Math.min(options.maxDelay, options.initialDelay * options.exponent ** attempts),
   attempts + 1,
 ];
 
