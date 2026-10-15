@@ -1,16 +1,29 @@
 import { IBackoff, IBackoffFactory } from './backoff/Backoff.js';
 import { ConstantBackoff } from './backoff/ConstantBackoff.js';
 import { neverAbortedSignal } from './common/abort.js';
-import { EventEmitter } from './common/Event.js';
+import { EventEmitter, onAbort } from './common/Event.js';
 import { ExecuteWrapper } from './common/Executor.js';
 import { FailureReason, IDefaultPolicyContext, IPolicy } from './Policy.js';
 
-const delay = (duration: number, unref: boolean) =>
-  new Promise(resolve => {
-    const timer = setTimeout(resolve, duration);
+/**
+ * Resolves after the duration, or as soon as the signal is aborted, whichever
+ * comes first. The timer and the abort listener are always cleaned up.
+ */
+const delay = (duration: number, unref: boolean, signal: AbortSignal) =>
+  new Promise<void>(resolve => {
+    const abortEvt = onAbort(signal);
+    const timer = setTimeout(() => {
+      abortEvt.dispose();
+      resolve();
+    }, duration);
     if (unref) {
       timer.unref();
     }
+
+    abortEvt.event(() => {
+      clearTimeout(timer);
+      resolve();
+    });
   });
 
 /**
@@ -115,12 +128,15 @@ export class RetryPolicy implements IPolicy<IRetryContext> {
         const context = { attempt: retries + 1, signal, result };
         backoff = backoff ? backoff.next(context) : factory.next(context);
         const delayDuration = backoff.duration;
-        const delayPromise = delay(delayDuration, !!this.options.unref);
+        const delayPromise = delay(delayDuration, !!this.options.unref, signal);
         // A little sneaky reordering here lets us use Sinon's fake timers
         // when we get an emission in our tests.
         this.onRetryEmitter.emit({ ...result, delay: delayDuration, attempt: retries + 1 });
         await delayPromise;
-        continue;
+        // If we were cancelled while waiting, give up instead of retrying
+        if (!signal.aborted) {
+          continue;
+        }
       }
 
       this.onGiveUpEmitter.emit(result);
