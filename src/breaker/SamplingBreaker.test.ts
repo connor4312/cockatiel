@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import { SinonFakeTimers, useFakeTimers } from 'sinon';
 import { CircuitState } from '../CircuitBreakerPolicy.js';
+import { circuitBreaker, handleAll } from '../Policy.js';
 import { SamplingBreaker } from './SamplingBreaker.js';
 
 const getState = (b: SamplingBreaker) => {
@@ -124,6 +125,157 @@ describe('SamplingBreaker', () => {
         { failures: 3, successes: 6, startedAt: 3000 },
         { failures: 4, successes: 8, startedAt: 4000 },
       ]);
+    });
+  });
+
+  describe('idle periods', () => {
+    // 5 windows of 1s, and at least 5 samples are needed to open
+    const duration = 5_000;
+    let b: SamplingBreaker;
+    let clock: SinonFakeTimers;
+
+    beforeEach(() => {
+      b = new SamplingBreaker({ threshold: 0.5, duration, minimumRps: 1 });
+      clock = useFakeTimers();
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    const expectConsistent = () => {
+      const s = getState(b);
+      expect(s.currentFailures).to.equal(
+        s.windows.reduce((n: number, w: any) => n + w.failures, 0),
+      );
+      expect(s.currentSuccesses).to.equal(
+        s.windows.reduce((n: number, w: any) => n + w.successes, 0),
+      );
+    };
+
+    const failures = (n: number) => {
+      for (let i = 0; i < n; i++) {
+        b.failure(CircuitState.Closed);
+      }
+    };
+
+    it('does not count stale samples after a long idle period', () => {
+      failures(4);
+      clock.tick(100_000);
+
+      // a single call in the last 100s is below the minimum rps
+      expect(b.failure(CircuitState.Closed)).to.be.false;
+      expect(getState(b)).to.containSubset({ currentFailures: 1, currentSuccesses: 0 });
+      expectConsistent();
+    });
+
+    it('does not count stale samples when idle for more than the duration', () => {
+      failures(4);
+      clock.tick(duration + 1);
+      expect(b.failure(CircuitState.Closed)).to.be.false;
+      expect(getState(b).currentFailures).to.equal(1);
+      expectConsistent();
+    });
+
+    it('drops samples that are exactly the full duration old', () => {
+      failures(4);
+      clock.tick(duration);
+      expect(b.failure(CircuitState.Closed)).to.be.false;
+      expect(getState(b).currentFailures).to.equal(1);
+      expectConsistent();
+    });
+
+    it('keeps samples that are just under the full duration old', () => {
+      failures(4);
+      clock.tick(duration - 1);
+      expect(b.failure(CircuitState.Closed)).to.be.true;
+      expect(getState(b).currentFailures).to.equal(5);
+      expectConsistent();
+    });
+
+    it('keeps the previous window when exactly one window elapses', () => {
+      failures(4);
+      clock.tick(1000);
+      expect(b.failure(CircuitState.Closed)).to.be.true;
+      expect(getState(b)).to.containSubset({ currentFailures: 5, currentWindow: 1 });
+      expectConsistent();
+    });
+
+    it('advances by the number of windows that elapsed', () => {
+      failures(1);
+      clock.tick(3000);
+      failures(1);
+
+      expect(getState(b)).to.containSubset({ currentFailures: 2, currentWindow: 3 });
+      expect(getState(b).windows).to.deep.equal([
+        { failures: 1, successes: 0, startedAt: 0 },
+        { failures: 0, successes: 0, startedAt: 0 },
+        { failures: 0, successes: 0, startedAt: 0 },
+        { failures: 1, successes: 0, startedAt: 3000 },
+        { failures: 0, successes: 0, startedAt: 0 },
+      ]);
+
+      // the ring order is preserved, so the first sample expires on time
+      clock.tick(1000);
+      failures(1);
+      expect(getState(b)).to.containSubset({ currentFailures: 3, currentWindow: 4 });
+
+      clock.tick(1000);
+      failures(1);
+      expect(getState(b)).to.containSubset({ currentFailures: 3, currentWindow: 0 });
+      expectConsistent();
+    });
+
+    it('only expires the windows that are older than the duration', () => {
+      // one sample per second in windows 0, 1, 2 (at t=0, 1s, 2s)
+      for (let i = 0; i < 3; i++) {
+        b.success(CircuitState.Closed);
+        failures(1);
+        clock.tick(1000);
+      }
+
+      expect(getState(b)).to.containSubset({ currentFailures: 3, currentSuccesses: 3 });
+
+      // at t=6s, the samples from t=0 and t=1s are older than 5s
+      clock.tick(3000);
+      failures(1);
+      expect(getState(b)).to.containSubset({ currentFailures: 2, currentSuccesses: 1 });
+      expectConsistent();
+
+      // at t=8s the samples from t=2s are older than 5s too
+      clock.tick(2000);
+      failures(1);
+      expect(getState(b)).to.containSubset({ currentFailures: 2, currentSuccesses: 0 });
+      expectConsistent();
+    });
+
+    it('starts afresh when a burst follows an idle period', () => {
+      failures(4);
+      clock.tick(60_000);
+
+      failures(4);
+      expect(getState(b)).to.containSubset({ currentFailures: 4 });
+      expect(b.failure(CircuitState.Closed)).to.be.true;
+      expect(getState(b)).to.containSubset({ currentFailures: 5 });
+      expectConsistent();
+    });
+
+    it('does not open the circuit on one failure after a long idle period', async () => {
+      const policy = circuitBreaker(handleAll, {
+        halfOpenAfter: 1000,
+        breaker: new SamplingBreaker({ threshold: 0.5, duration: 10_000, minimumRps: 1 }),
+      });
+
+      const fail = () => policy.execute(() => Promise.reject(new Error('oops'))).catch(() => {});
+
+      for (let i = 0; i < 9; i++) {
+        await fail();
+      }
+      expect(policy.state).to.equal(CircuitState.Closed);
+
+      clock.tick(100_000);
+      await fail();
+      expect(policy.state).to.equal(CircuitState.Closed);
     });
   });
 
