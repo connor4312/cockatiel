@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { SinonFakeTimers, SinonStub, stub, useFakeTimers } from 'sinon';
+import { SinonFakeTimers, SinonStub, spy, stub, useFakeTimers } from 'sinon';
 import { promisify } from 'util';
 import { IBackoffFactory } from './backoff/Backoff.js';
 import { IterableBackoff } from './backoff/IterableBackoff.js';
@@ -10,6 +10,7 @@ import {
   IHalfOpenAfterBackoffContext,
 } from './CircuitBreakerPolicy.js';
 import { abortedSignal } from './common/abort.js';
+import { defer } from './common/defer.js';
 import { BrokenCircuitError, TaskCancelledError } from './errors/Errors.js';
 import { IsolatedCircuitError } from './errors/IsolatedCircuitError.js';
 import { circuitBreaker, handleAll, handleType } from './Policy.js';
@@ -83,6 +84,131 @@ describe('CircuitBreakerPolicy', () => {
     expect(await result).to.equal(42);
     expect(p.state).to.equal(CircuitState.Closed);
     expect(onReset).calledOnce;
+  });
+
+  describe('stale closed calls', () => {
+    for (const calls of [1, 2]) {
+      it(`does not supersede ${calls} half-open trial(s) when a closed call fails`, async () => {
+        p = circuitBreaker(handleType(MyException), {
+          halfOpenAfter: new IterableBackoff([1000, 2000]),
+          breaker: new ConsecutiveBreaker(1),
+          halfOpenSampling: { calls, threshold: 0 },
+        });
+        p.onBreak(onBreak);
+        p.onReset(onReset);
+        p.onHalfOpen(onHalfOpen);
+
+        const slowCall = defer<number>();
+        const slowResult = p.execute(() => slowCall.promise);
+        const openingError = new MyException('opening failure');
+        await expect(p.execute(() => Promise.reject(openingError))).to.be.rejectedWith(
+          openingError,
+        );
+        clock.tick(1000);
+
+        const trial = defer<number>();
+        const trials = Array.from({ length: calls }, () => p.execute(() => trial.promise));
+        const queued = stub().resolves(43);
+        const queuedResult = p.execute(queued).then(
+          value => ({ value }),
+          error => ({ error }),
+        );
+        const halfOpenState = p.toJSON();
+        const slowError = new MyException('stale failure');
+        const slowRejection = expect(slowResult).to.be.rejectedWith(slowError);
+        slowCall.reject(slowError);
+        await slowRejection;
+
+        expect(p.state).to.equal(CircuitState.HalfOpen);
+        expect(p.toJSON()).to.deep.equal(halfOpenState);
+        expect(p.lastFailure).to.deep.equal({ error: openingError });
+        expect(onBreak).calledOnce;
+        expect(queued).not.called;
+
+        clock.tick(3000);
+        const later = stub().resolves(44);
+        const laterResult = p.execute(later);
+        expect(later).not.called;
+        expect(onHalfOpen).calledOnce;
+
+        trial.resolve(42);
+        expect(await Promise.all(trials)).to.deep.equal(Array(calls).fill(42));
+        expect(await queuedResult).to.deep.equal({ value: 43 });
+        expect(await laterResult).to.equal(44);
+        expect(p.state).to.equal(CircuitState.Closed);
+        expect(onReset).calledOnce;
+      });
+    }
+
+    for (const phase of ['open', 'half-open', 'recovered', 'isolated', 'released isolation']) {
+      for (const outcome of ['success', 'error', 'handled value']) {
+        it(`ignores a stale ${outcome} while ${phase}`, async () => {
+          const breaker = new ConsecutiveBreaker(2);
+          p = circuitBreaker(
+            handleType(MyException).orWhenResult(value => value === 0),
+            { halfOpenAfter: 1000, breaker },
+          );
+          const onResult = stub();
+          if (outcome === 'success') {
+            p.onSuccess(onResult);
+          } else {
+            p.onFailure(onResult);
+          }
+
+          const slowCall = defer<number>();
+          const slowResult = p.execute(() => slowCall.promise);
+          await openBreaker();
+
+          const trial = defer<number>();
+          let trialResult: Promise<number> | undefined;
+          if (phase === 'half-open' || phase === 'recovered') {
+            clock.tick(1000);
+            trialResult = p.execute(() => trial.promise);
+            if (phase === 'recovered') {
+              trial.resolve(42);
+              await trialResult;
+            }
+          } else if (phase === 'isolated' || phase === 'released isolation') {
+            const isolation = p.isolate();
+            if (phase === 'released isolation') {
+              isolation.dispose();
+            }
+          }
+
+          const state = p.toJSON();
+          const lastFailure = p.lastFailure;
+          const success = spy(breaker, 'success');
+          const failure = spy(breaker, 'failure');
+          const onStateChange = stub();
+          p.onStateChange(onStateChange);
+          onResult.resetHistory();
+
+          if (outcome === 'error') {
+            const error = new MyException('stale failure');
+            const rejection = expect(slowResult).to.be.rejectedWith(error);
+            slowCall.reject(error);
+            await rejection;
+          } else {
+            const value = outcome === 'success' ? 42 : 0;
+            slowCall.resolve(value);
+            expect(await slowResult).to.equal(value);
+          }
+
+          expect(success).not.called;
+          expect(failure).not.called;
+          expect(p.toJSON()).to.deep.equal(state);
+          expect(p.lastFailure).to.equal(lastFailure);
+          expect(onStateChange).not.called;
+          expect(onResult).calledOnce;
+
+          if (phase === 'half-open') {
+            trial.resolve(42);
+            await trialResult;
+            expect(p.state).to.equal(CircuitState.Closed);
+          }
+        });
+      }
+    }
   });
 
   it('uses the given backof factory to decide whether to enter the half open state', async () => {

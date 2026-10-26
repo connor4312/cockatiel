@@ -260,12 +260,14 @@ export class CircuitBreakerPolicy implements IPolicy {
     switch (state.value) {
       case CircuitState.Closed:
         const result = await this.executor.invoke(fn, { signal });
-        if ('success' in result) {
-          this.options.breaker.success(state.value);
-        } else {
-          this.innerLastFailure = result;
-          if (this.options.breaker.failure(state.value)) {
-            this.open(result, signal);
+        if (this.innerState === state) {
+          if ('success' in result) {
+            this.options.breaker.success(state.value);
+          } else {
+            this.innerLastFailure = result;
+            if (this.options.breaker.failure(state.value)) {
+              this.open(result, signal);
+            }
           }
         }
 

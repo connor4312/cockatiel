@@ -5,6 +5,7 @@
 - **breaking:** updated minimum Node version to 22, and cockatiel is now built as an ES module
 - **breaking:** errors surfaced from policies are no longer cast via `as Error`; callback and result types now reflect `unknown` for thrown values ([#97](https://github.com/connor4312/cockatiel/issues/97))
 - **feat:** add `halfOpenSampling` option to the circuit breaker ([#73](https://github.com/connor4312/cockatiel/issues/73))
+- **fix:** ignore stale closed-state call results after the circuit transitions, preventing them from superseding half-open recovery ([#131](https://github.com/connor4312/cockatiel/issues/131))
 - **fix:** bulkhead queue starvation when queued executions were aborted ([#112](https://github.com/connor4312/cockatiel/issues/112))
 - **fix:** propagate the abort signal into the half-open state of the circuit breaker ([#112](https://github.com/connor4312/cockatiel/issues/112))
 - **fix:** deep copy state in `CountBreaker` and `SamplingBreaker` getters/setters via `structuredClone` ([#113](https://github.com/connor4312/cockatiel/issues/113))
