@@ -588,6 +588,8 @@ To create a breaker, you use a [Policy](#Policy) like you normally would, and ca
 
 Calls to `execute()` while the circuit is open (not taking requests) will throw a `BrokenCircuitError`.
 
+Calls admitted while the circuit is closed only affect the breaker while it remains in that same closed state. If the circuit opens or is isolated before a call completes, its result is still returned to the caller, but does not affect breaker statistics or state, even if the circuit has since closed again. Only calls admitted during the current half-open recovery sample determine whether it closes or reopens.
+
 ```js
 import {
   circuitBreaker,
