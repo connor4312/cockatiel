@@ -144,10 +144,23 @@ export class SamplingBreaker implements IBreaker {
     }
   }
 
-  private rotateWindow(now: number) {
-    const next = (this.currentWindow + 1) % this.windows.length;
-    this.currentFailures -= this.windows[next].failures;
-    this.currentSuccesses -= this.windows[next].successes;
+  /**
+   * Advances to a new window, `elapsedWindows` window lengths after the start
+   * of the current one. The windows passed over (at most the whole ring) are
+   * expired, so that samples older than the sampling duration are dropped even
+   * if no calls were made in between.
+   */
+  private rotateWindow(now: number, elapsedWindows: number) {
+    const steps = Math.min(elapsedWindows, this.windows.length);
+    for (let i = 1; i <= steps; i++) {
+      const expired = this.windows[(this.currentWindow + i) % this.windows.length];
+      this.currentFailures -= expired.failures;
+      this.currentSuccesses -= expired.successes;
+      expired.failures = 0;
+      expired.successes = 0;
+    }
+
+    const next = (this.currentWindow + steps) % this.windows.length;
     const window = (this.windows[next] = { failures: 0, successes: 0, startedAt: now });
     this.currentWindow = next;
 
@@ -159,8 +172,10 @@ export class SamplingBreaker implements IBreaker {
 
     // Get the current time period window, advance if necessary
     let window = this.windows[this.currentWindow];
-    if (now - window.startedAt >= this.windowSize) {
-      window = this.rotateWindow(now);
+    const elapsed = now - window.startedAt;
+    if (elapsed >= this.windowSize) {
+      // `|| 1` covers a zero window size, where the division is NaN
+      window = this.rotateWindow(now, Math.floor(elapsed / this.windowSize) || 1);
     }
 
     // Increment current counts
