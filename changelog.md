@@ -3,6 +3,7 @@
 ## 4.0.1 (TBA)
 
 - **fix:** ignore stale closed-state call results after the circuit transitions, preventing them from superseding half-open recovery ([#131](https://github.com/connor4312/cockatiel/issues/131))
+- **fix:** stop retries immediately when cancellation is requested during backoff, without scheduling a timer if the signal is already aborted ([#130](https://github.com/connor4312/cockatiel/pull/130))
 
 ## 4.0.0 (2026-05-26)
 

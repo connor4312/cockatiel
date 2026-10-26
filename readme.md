@@ -498,6 +498,8 @@ Executes the function. The current retry context, containing the attempts and ab
 
 If the function doesn't succeed before the backoff ceases or cancellation is requested, the last error thrown will be bubbled up, or the last result will be returned (if you used any of the `handleResult*` methods).
 
+Cancellation during a backoff ends the wait immediately, clears the pending timer, and gives up without starting another attempt. The `onGiveUp` event receives the last failure. Cancellation does not prevent the initial call or undo an attempt that has already started.
+
 ```ts
 await retry(handleAll, { maxAttempts: 3 }).execute(() => getJson('https://example.com'));
 ```
