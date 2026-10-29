@@ -211,6 +211,63 @@ describe('CircuitBreakerPolicy', () => {
     }
   });
 
+  describe('stale half-open calls', () => {
+    for (const phase of ['reopened', 'isolated', 'released isolation']) {
+      it(`ignores a stale half-open failure once ${phase}`, async () => {
+        p = circuitBreaker(handleType(MyException), {
+          halfOpenAfter: 1000,
+          breaker: new ConsecutiveBreaker(2),
+          halfOpenSampling: { calls: 2, threshold: 0 },
+        });
+
+        await openBreaker();
+        clock.tick(1000);
+
+        const trial = defer<number>();
+        const trialResult = p.execute(() => trial.promise);
+        if (phase === 'reopened') {
+          const reopeningError = new MyException('reopening failure');
+          await expect(p.execute(() => Promise.reject(reopeningError))).to.be.rejectedWith(
+            reopeningError,
+          );
+          expect(p.state).to.equal(CircuitState.Open);
+          expect(p.lastFailure).to.deep.equal({ error: reopeningError });
+        } else {
+          const isolation = p.isolate();
+          if (phase === 'released isolation') {
+            isolation.dispose();
+          }
+        }
+
+        const state = p.toJSON();
+        const lastFailure = p.lastFailure;
+        const error = new MyException('stale failure');
+        const rejection = expect(trialResult).to.be.rejectedWith(error);
+        trial.reject(error);
+        await rejection;
+
+        expect(p.toJSON()).to.deep.equal(state);
+        expect(p.lastFailure).to.equal(lastFailure);
+      });
+    }
+
+    it('still records a current half-open failure below the threshold', async () => {
+      p = circuitBreaker(handleType(MyException), {
+        halfOpenAfter: 1000,
+        breaker: new ConsecutiveBreaker(2),
+        halfOpenSampling: { calls: 2, threshold: 0.5 },
+      });
+
+      await openBreaker();
+      clock.tick(1000);
+
+      const error = new MyException('half-open failure');
+      await expect(p.execute(() => Promise.reject(error))).to.be.rejectedWith(error);
+      expect(p.state).to.equal(CircuitState.HalfOpen);
+      expect(p.lastFailure).to.deep.equal({ error });
+    });
+  });
+
   it('uses the given backof factory to decide whether to enter the half open state', async () => {
     p = circuitBreaker(handleType(MyException), {
       halfOpenAfter: new IterableBackoff([1000, 2000]),
