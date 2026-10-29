@@ -1,7 +1,7 @@
 import { neverAbortedSignal } from './common/abort.js';
 import { defer } from './common/defer.js';
 import { EventEmitter } from './common/Event.js';
-import { ExecuteWrapper } from './common/Executor.js';
+import { ExecuteWrapper, returnOrThrow } from './common/Executor.js';
 import { BulkheadRejectedError } from './errors/BulkheadRejectedError.js';
 import { TaskCancelledError } from './errors/Errors.js';
 import { IDefaultPolicyContext, IPolicy } from './Policy.js';
@@ -74,7 +74,7 @@ export class BulkheadPolicy implements IPolicy {
     if (this.active < this.capacity) {
       this.active++;
       try {
-        return await fn({ signal });
+        return returnOrThrow(await this.executor.invoke(fn, { signal }));
       } finally {
         this.active--;
         this.dequeue();
