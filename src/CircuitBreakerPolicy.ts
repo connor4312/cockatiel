@@ -336,7 +336,6 @@ export class CircuitBreakerPolicy implements IPolicy {
     if ('success' in result) {
       this.recordHalfOpenSuccess(state);
     } else {
-      this.innerLastFailure = result;
       this.recordHalfOpenFailure(state, result, signal);
     }
 
@@ -390,6 +389,7 @@ export class CircuitBreakerPolicy implements IPolicy {
       return;
     }
 
+    this.innerLastFailure = reason;
     state.inFlight--;
     state.failures++;
 
